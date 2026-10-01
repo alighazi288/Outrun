@@ -9,8 +9,7 @@ Only people in this table are assigned cards up front. One primary role per pers
 | Rachel | needed | Frontend | Map dashboard, plus the routing slice: roads, synthetic residents, and the driver-safety rule. | 5 |
 | Daniel | needed | Research | Eaton fire nowcast. Replicate an existing vision approach (ViT, VJEPA, IJEPA, YOLO, or the brief's wind-spread nowcast). The wind-spread nowcast is the one the demo can rely on. A learned model is a comparison after that works. | 2 |
 
-Board: [Eaton Evacuation MVP](https://trello.com/b/L12ru6Ut/eaton-evacuation-mvp). GitHub usernames for Bhavaani, Rachel, and Daniel are not in the repo. Do not invent them. The workspace has one Trello member, so ownership is the name label, not a Trello member assignment.
-
+Board: [Eaton Evacuation MVP](https://trello.com/b/L12ru6Ut/eaton-evacuation-mvp). 
 ## How a card gets an owner
 
 Tasks live on Trello.
