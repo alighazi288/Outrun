@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Secrets
+.env
+
+# Big or rebuilt data (small files in data/processed/ ARE committed)
+data/raw/
+data/runs/
+replay/
+*.graphml
+*.grib2
+*.nc
+
+# Dashboard
+node_modules/
+dashboard/dist/
+dashboard/public/replay/
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/

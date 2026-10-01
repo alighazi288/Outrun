@@ -1,0 +1,14 @@
+# Keep bulky or generated files out of Bob's context. Saves Bobcoins and keeps answers focused.
+.venv/
+uv.lock
+data/raw/
+data/runs/
+replay/
+node_modules/
+dashboard/dist/
+dashboard/public/replay/
+*.graphml
+*.grib2
+*.nc
+*.parquet
+bob_sessions/*.png
