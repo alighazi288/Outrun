@@ -57,8 +57,8 @@ true under every report. We present evidence and assign no blame.
 | Group | Known from | Rule |
 |---|---|---|
 | Care-facility residents | the start | Real licensed facilities: a real, public list |
-| Estimated residents on a list | the start | `FRACTION_KNOWN` of them, drawn at random, independent of location and fire |
-| Everyone else | their help call | trigger = earlier of (a) a real warning/order covering their home or (b) the first published fire report or satellite detection within `TRIGGER_KM`; call = trigger + uniform(0, `CALL_DELAY_MAX_MIN`); planner sees it `HANDLING_DELAY_MIN` later; `NEVER_CALL` of them never call |
+| Estimated residents on a list | the start | `FRACTION_KNOWN` of them, drawn at random, independent of location and fire. The published result is the curve at 0, 25, 50, and 100%. 25% is the hold point for other sweeps, not the number we claim |
+| Everyone else | their help call | trigger = earlier of (a) a real warning/order covering their home or (b) the first published fire report within `TRIGGER_KM` (not a satellite detection, and not our forecast); call = trigger + uniform(0, `CALL_DELAY_MAX_MIN`); planner sees it `HANDLING_DELAY_MIN` later; `NEVER_CALL` of them never call |
 
 Why not the obvious alternatives:
 - **A fixed time** ignores the fire.
@@ -121,15 +121,14 @@ effect, it's skipped and escalated.
 | Road blockages (known to all planners; needs the road network) | 0% | 0, 5, 10% |
 | Safety margin | 30 min | 15, 30, 45 min |
 
-- **Why one at a time:** every combination is about 420,000 settings. One at a time is 27, and it
-  shows directly how much each setting matters. Untested interactions are a stated limitation.
+- **Why one at a time:** every combination is about 420,000 settings. We change one setting at a time around the baseline. That is the table above, not the full grid. Untested interactions are a stated limitation.
 - **Combined scenarios:** "bad night" (every setting at its pessimistic end) and "good night"
   (every setting at its optimistic end) bound the best and worst case.
 - **Fleet curve:** run at 25% and 100% known. At 25% it may flatten below 90%, because vans can't
   rescue people nobody knows about. If so, that's a finding. "Vehicles needed for 90%" is read from
   the 100% curve: the smallest fleet where the median population gets ≥ 90% out. Extra points are
   added where the curve crosses 90%. A 0% curve is added if timing allows.
-- **Runs.** About 2,200 in total:
+- **Runs.** About 2,000 in total:
   - 34 settings × 2 planners × 30 populations
   - closest-first and the true-fire-path mode at baseline
   - the 5th-percentile check
@@ -189,6 +188,7 @@ router, not part of the evaluation. The test runs on the real Eaton replay.
 
 ## 11. Agents
 
+- **Two agents:** Intake and Dispatch, both on IBM Granite. A supervisor is added only if Orchestrate needs one to route between them. The model name is confirmed when the instance is registered.
 - **No AI runs inside the evaluation.**
   - Fire reports enter as records structured by hand from the published timelines and checks by hand.
   - Simulated calls enter as records.
@@ -238,3 +238,4 @@ Never "lives saved". Never "would have saved" a specific person.
 | Date | Change | Reason |
 |---|---|---|
 | Oct 1 | Proposed by Ali | Answers PRD "Still unset"; adds fire reports, care facilities, driver-safety rule |
+| Oct 2 | Ali confirmed the five numbers | 25% is a curve point, not the published registry rate. Call trigger is an order or a published fire report, not a satellite detection. Two agents, plus a supervisor only if Orchestrate requires one |
