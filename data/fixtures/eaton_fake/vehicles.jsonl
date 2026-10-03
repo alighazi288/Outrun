@@ -1,0 +1,5 @@
+{"id":"v_01","type":"wheelchair_van","seats":6,"wheelchair_spaces":2,"stretcher_spaces":0,"lat":34.1478,"lon":-118.1445,"status":"idle","depot":"depot_1"}
+{"id":"v_02","type":"wheelchair_van","seats":6,"wheelchair_spaces":2,"stretcher_spaces":0,"lat":34.1478,"lon":-118.1445,"status":"idle","depot":"depot_1"}
+{"id":"v_03","type":"ambulance","seats":2,"wheelchair_spaces":1,"stretcher_spaces":1,"lat":34.1478,"lon":-118.1445,"status":"idle","depot":"depot_1"}
+{"id":"v_04","type":"ambulance","seats":2,"wheelchair_spaces":1,"stretcher_spaces":1,"lat":34.1478,"lon":-118.1445,"status":"idle","depot":"depot_1"}
+{"id":"v_05","type":"bus","seats":40,"wheelchair_spaces":0,"stretcher_spaces":0,"lat":34.1478,"lon":-118.1445,"status":"idle","depot":"depot_1"}
