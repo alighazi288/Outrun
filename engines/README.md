@@ -18,6 +18,7 @@ and agents work end to end. We can then replace the stub behind the **same signa
 
 ## Rules for every implementation
 1. **Never drop anyone silently.** Every at-risk resident ends up in a route or in `unreachable`.
+   Those too late or only reachable through danger are also listed in `escalated_fire_command`.
 2. **Driver safety.** For every hex a vehicle occupies (stops and the hexes between them):
    leave time + `SAFETY_MARGIN_MIN` ≤ that hex's `arrival_p10_min`. Burning hexes are never entered.
    No pickup without a safe way out to a shelter. Use `SafetyMap` from `routing.py`.
