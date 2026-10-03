@@ -214,8 +214,8 @@ class FireDetection(Model):
 
 class FireReport(Model):
     """One report of fire at a place and time: a 911 call or radio report in live use; in the
-    Eaton replay, a timestamped repvestigations (FSRI, county review).
-    Reports were the main real-time signal that night: the Vort from the published inIIRS satellite's first detection of
+    Eaton replay, a timestamped report from the published investigations (FSRI, county review).
+    Reports were the main real-time signal that night: the VIIRS satellite's first detection of
     the fire was at 1:30 a.m."""
 
     id: str
