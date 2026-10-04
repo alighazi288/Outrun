@@ -4,7 +4,7 @@
 -include .env
 export
 
-.PHONY: help install test lint fix check api export view fixtures openapi clean
+.PHONY: help install test lint fix check api export view eval fixtures openapi clean
 
 help:  ## List commands
 	@grep -hE '^[a-z]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-9s %s\n", $$1, $$2}'
@@ -32,6 +32,9 @@ export:  ## Pre-compute the replay into replay/
 view: export  ## Play the replay in the stand-in viewer: http://localhost:8001/scripts/viewer/
 	@echo "Open http://localhost:8001/scripts/viewer/  (Ctrl+C to stop)"
 	uv run python -m http.server 8001 --bind 127.0.0.1
+
+eval:  ## Score our planner vs the dispatcher rule (STAND-IN; ~15 s)
+	uv run python -m evaluation.standin
 
 fixtures:  ## Regenerate the fake test data (same output every time)
 	uv run python scripts/make_fake_data.py

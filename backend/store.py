@@ -111,10 +111,10 @@ class DataStore:
         self.cells = grid_cells(self.meta["bbox"])
 
     @classmethod
-    def from_env(cls) -> DataStore:
+    def from_env(cls, seed: int = 0) -> DataStore:
         key = os.environ.get("OUTRUN_DATASET", "fixtures")
         folder = DATASETS.get(key, Path(key))  # a known name, or a path to any dataset folder
-        return cls(folder)
+        return cls(folder, seed=seed)
 
     def make_clock(self) -> ReplayClock:
         replay = self.meta["replay"]
