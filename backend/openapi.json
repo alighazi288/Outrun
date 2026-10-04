@@ -339,7 +339,7 @@
     "/requests": {
       "post": {
         "summary": "Add a help request to the plan",
-        "description": "Send a structured request (location, needs, people, notes). The backend fills in the map cell, vehicle types and loading time. The person becomes visible to the planner after the call-handling delay (HANDLING_DELAY_MIN after reported_at).",
+        "description": "Send a structured request: the caller's address, needs, people, notes. The backend looks up the coordinates and fills in the map cell, vehicle types and loading time. If the address isn't found, the error says what to ask the caller. The person becomes visible to the planner after the call-handling delay.",
         "operationId": "submit_help_request",
         "requestBody": {
           "content": {
@@ -378,7 +378,7 @@
     "/reports": {
       "post": {
         "summary": "Add a report of fire at a place and time",
-        "description": "Send a structured fire sighting (where, when, what was seen). It feeds the fire forecast from reported_at onward, alongside satellite detections.",
+        "description": "Send a structured fire sighting: the nearest address, what was seen. The backend looks up the coordinates. It feeds the fire forecast from reported_at onward, alongside satellite detections.",
         "operationId": "submit_fire_report",
         "requestBody": {
           "content": {
@@ -949,28 +949,25 @@
       },
       "FireReportIn": {
         "properties": {
-          "reported_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Reported At"
-          },
-          "lat": {
-            "type": "number",
-            "title": "Lat"
-          },
-          "lon": {
-            "type": "number",
-            "title": "Lon"
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address",
+            "description": "Nearest street address with house number and city. The backend looks up the coordinates.",
+            "examples": [
+              "2260 N Lake Ave, Altadena, CA"
+            ]
           },
           "description": {
             "type": "string",
-            "title": "Description"
-          },
-          "location_precision_m": {
-            "type": "number",
-            "minimum": 0.0,
-            "title": "Location Precision M",
-            "default": 250.0
+            "title": "Description",
+            "description": "What was seen, in a short sentence"
           },
           "raw_text": {
             "anyOf": [
@@ -982,13 +979,53 @@
               }
             ],
             "title": "Raw Text"
+          },
+          "reported_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reported At",
+            "description": "When it was reported. Omit to use the replay clock's current time."
+          },
+          "lat": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lat",
+            "description": "Only if known from a device, never estimated"
+          },
+          "lon": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lon",
+            "description": "Only if known from a device, never estimated"
+          },
+          "location_precision_m": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Location Precision M",
+            "default": 250.0
           }
         },
         "type": "object",
         "required": [
-          "reported_at",
-          "lat",
-          "lon",
           "description"
         ],
         "title": "FireReportIn",
@@ -1009,18 +1046,20 @@
       },
       "HelpRequest": {
         "properties": {
-          "reported_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Reported At"
-          },
-          "lat": {
-            "type": "number",
-            "title": "Lat"
-          },
-          "lon": {
-            "type": "number",
-            "title": "Lon"
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address",
+            "description": "Street address with house number and city, as the caller said it. The backend looks up the coordinates.",
+            "examples": [
+              "2260 N Lake Ave, Altadena, CA"
+            ]
           },
           "needs": {
             "type": "string",
@@ -1031,24 +1070,15 @@
               "no_car",
               "none"
             ],
-            "title": "Needs"
+            "title": "Needs",
+            "description": "wheelchair, oxygen, bedbound, no_car (can move but has no ride), or none"
           },
           "people": {
             "type": "integer",
             "minimum": 1.0,
             "title": "People",
+            "description": "How many people need the ride",
             "default": 1
-          },
-          "address": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Address"
           },
           "notes": {
             "anyOf": [
@@ -1075,18 +1105,52 @@
             ],
             "title": "Raw Text",
             "description": "Original message, kept for audit"
+          },
+          "reported_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reported At",
+            "description": "When the call came in. Omit to use the replay clock's current time."
+          },
+          "lat": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lat",
+            "description": "Only if known from a device, never estimated"
+          },
+          "lon": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lon",
+            "description": "Only if known from a device, never estimated"
           }
         },
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "reported_at",
-          "lat",
-          "lon",
           "needs"
         ],
         "title": "HelpRequest",
-        "description": "A structured help request. The Intake agent turns free text into this; the backend\nfills in every number (cell, vehicle types, load time) from NEED_PROFILES."
+        "description": "A structured help request. The Intake agent turns free text into this; the backend\nfills in every number (coordinates, cell, vehicle types, load time)."
       },
       "OutlookSummary": {
         "properties": {

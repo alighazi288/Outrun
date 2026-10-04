@@ -291,16 +291,26 @@ class Shelter(Model):
 
 class HelpRequest(Model):
     """A structured help request. The Intake agent turns free text into this; the backend
-    fills in every number (cell, vehicle types, load time) from NEED_PROFILES."""
+    fills in every number (coordinates, cell, vehicle types, load time)."""
 
-    reported_at: AwareDatetime
-    lat: float
-    lon: float
-    needs: Need
-    people: int = Field(1, ge=1)
-    address: str | None = None
+    address: str | None = Field(
+        None, description="Street address with house number and city, as the caller said it. "
+        "The backend looks up the coordinates.", examples=["2260 N Lake Ave, Altadena, CA"])
+    needs: Need = Field(description="wheelchair, oxygen, bedbound, no_car (can move but has no "
+                        "ride), or none")
+    people: int = Field(1, ge=1, description="How many people need the ride")
     notes: str | None = Field(None, examples=["on oxygen, 2nd floor"])
     raw_text: str | None = Field(None, description="Original message, kept for audit")
+    reported_at: AwareDatetime | None = Field(
+        None, description="When the call came in. Omit to use the replay clock's current time.")
+    lat: float | None = Field(None, description="Only if known from a device, never estimated")
+    lon: float | None = Field(None, description="Only if known from a device, never estimated")
+
+    @model_validator(mode="after")
+    def _has_location(self) -> HelpRequest:
+        if not self.address and (self.lat is None or self.lon is None):
+            raise ValueError("give an address (house number, street, city) or lat and lon")
+        return self
 
 
 class ResidentRisk(Model):
