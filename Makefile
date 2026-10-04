@@ -4,10 +4,10 @@
 -include .env
 export
 
-.PHONY: help install test lint fix check api export fixtures openapi clean
+.PHONY: help install test lint fix check api export view fixtures openapi clean
 
 help:  ## List commands
-	@grep -E '^[a-z]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-9s %s\n", $$1, $$2}'
+	@grep -hE '^[a-z]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-9s %s\n", $$1, $$2}'
 
 install:  ## Install Python deps (add extras with: uv sync --group dev --extra routing)
 	uv sync --group dev
@@ -28,6 +28,10 @@ api:  ## Start the API on http://localhost:8000 (docs at /docs)
 
 export:  ## Pre-compute the replay into replay/
 	uv run outrun-export
+
+view: export  ## Play the replay in the stand-in viewer: http://localhost:8001/scripts/viewer/
+	@echo "Open http://localhost:8001/scripts/viewer/  (Ctrl+C to stop)"
+	uv run python -m http.server 8001 --bind 127.0.0.1
 
 fixtures:  ## Regenerate the fake test data (same output every time)
 	uv run python scripts/make_fake_data.py

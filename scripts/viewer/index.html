@@ -1,0 +1,373 @@
+<!doctype html>
+<!--
+  Outrun stand-in viewer. A PLACEHOLDER for the real dashboard (dashboard/, Rachel).
+
+  It plays the precomputed replay: `make export` writes replay/manifest.json, one snapshot per
+  10 minutes in replay/steps/, and replay/cells.geojson (the map hexagons). `make view` serves
+  the repo and this page reads those files. No server logic, no build step: one file.
+
+  Each snapshot is a WorldState (backend/schemas.py): only what was known at that time.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Outrun Viewer</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css">
+<script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --line: #2a2f3a; --text: #e6e8ec; --muted: #9aa3b2;
+    --warn: #f43f5e; --ok: #4ade80; --risk: #38bdf8; --fake: #facc15;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .app { display: grid; grid-template-columns: 1fr 360px; height: 100%; }
+  #map { height: 100%; }
+  .panel { background: var(--panel); border-left: 1px solid var(--line); overflow-y: auto;
+    padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+  h1 { font-size: 18px; margin: 0; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted);
+    margin: 0 0 8px; }
+  .badge { display: inline-block; margin-top: 6px; padding: 2px 8px; border-radius: 4px;
+    background: var(--fake); color: #111; font-weight: 600; font-size: 12px; }
+  .clock { font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .clock small { font-size: 13px; font-weight: 400; color: var(--muted); display: block; }
+  .controls { display: flex; gap: 8px; align-items: center; }
+  button { background: #252a35; color: var(--text); border: 1px solid var(--line);
+    border-radius: 6px; padding: 6px 12px; font: inherit; cursor: pointer; }
+  button.on { background: #3b4252; border-color: #5b6475; }
+  input[type=range] { flex: 1; }
+  .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .tile { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+  .tile b { display: block; font-size: 24px; font-variant-numeric: tabular-nums; }
+  .tile span { color: var(--muted); font-size: 12px; }
+  .list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+  .list li { background: var(--bg); border: 1px solid var(--line); border-radius: 6px;
+    padding: 6px 8px; font-size: 13px; }
+  .list .who { font-weight: 600; }
+  .list .why { color: var(--muted); }
+  .esc li { border-left: 3px solid var(--warn); }
+  .legend { display: grid; grid-template-columns: 14px 1fr; gap: 4px 8px; align-items: center;
+    font-size: 12px; color: var(--muted); }
+  .sw { width: 12px; height: 12px; border-radius: 50%; }
+  .sq { border-radius: 2px; }
+  .foot { font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 10px; }
+  .maplibregl-popup-content { background: var(--panel); color: var(--text); font-size: 13px; }
+  .maplibregl-popup-tip { border-top-color: var(--panel) !important; border-bottom-color: var(--panel) !important; }
+  @media (max-width: 800px) {
+    .app { grid-template-columns: 1fr; grid-template-rows: 55vh auto; height: auto; }
+    #map { height: 55vh; }
+    .panel { border-left: 0; border-top: 1px solid var(--line); }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <div id="map"></div>
+  <aside class="panel">
+    <div>
+      <h1>Outrun · stand-in viewer</h1>
+      <span class="badge" id="fake-badge">FAKE DATA · placeholder for the real dashboard</span>
+    </div>
+
+    <div>
+      <div class="clock" id="clock">--:--<small>known at this time, no hindsight</small></div>
+      <div class="controls">
+        <button id="play">▶ Play</button>
+        <input type="range" id="slider" min="0" max="0" value="0" aria-label="Replay time">
+      </div>
+    </div>
+
+    <div class="tiles">
+      <div class="tile"><b id="n-known">0</b><span>people known</span></div>
+      <div class="tile"><b id="n-risk">0</b><span>at risk now</span></div>
+      <div class="tile"><b id="n-picked" style="color:var(--ok)">0</b><span>picked up</span></div>
+      <div class="tile"><b id="n-esc" style="color:var(--warn)">0</b><span>escalations</span></div>
+    </div>
+
+    <div>
+      <h2>Fire within</h2>
+      <div class="controls" id="horizon">
+        <button data-h="p_1h" class="on">1 h</button>
+        <button data-h="p_2h">2 h</button>
+        <button data-h="p_3h">3 h</button>
+      </div>
+    </div>
+
+    <div>
+      <h2>Vehicles</h2>
+      <ul class="list" id="vehicles"></ul>
+    </div>
+
+    <div>
+      <h2>Escalations</h2>
+      <ul class="list esc" id="escalations"></ul>
+    </div>
+
+    <div>
+      <h2>Legend</h2>
+      <div class="legend">
+        <div class="sw sq" style="background:#fde68a"></div><div>fire chance, light → dark = likely</div>
+        <div class="sw sq" style="background:#450a0a;border:1px solid #b91c1c"></div><div>burning</div>
+        <div class="sw" style="background:#fbbf24"></div><div>satellite detection</div>
+        <div class="sw" style="background:#fff;border:2px solid #f59e0b"></div><div>fire report (call/radio)</div>
+        <div class="sw" style="background:#94a3b8"></div><div>person, not at risk yet</div>
+        <div class="sw" style="background:var(--risk)"></div><div>person at risk (bigger = higher priority)</div>
+        <div class="sw" style="background:var(--warn);border:2px solid #fff"></div><div>escalation: no safe pickup</div>
+        <div class="sw" style="background:var(--ok)"></div><div>picked up</div>
+        <div class="sw" style="background:#a78bfa"></div><div>care facility</div>
+        <div class="sw sq" style="background:#22c55e"></div><div>shelter</div>
+        <div class="sw" style="background:#fff;border:2px solid #111"></div><div>vehicle (line = its route)</div>
+      </div>
+    </div>
+
+    <div class="foot" id="foot">
+      Placeholder viewer to check the pipeline end to end. The real dashboard lives in dashboard/.
+    </div>
+  </aside>
+</div>
+
+<script>
+// Where the replay files are. `make view` serves the repo root, so /replay/ is `make export`'s output.
+const REPLAY = new URLSearchParams(location.search).get("replay") || "/replay/";
+
+let manifest, cells, current;            // manifest.json, cells.geojson, the snapshot on screen
+let horizon = "p_1h";                    // which fire forecast colors the hexes
+const cache = new Map();                 // step index -> snapshot, so scrubbing back is instant
+const empty = { type: "FeatureCollection", features: [] };
+
+const map = new maplibregl.Map({
+  container: "map",
+  style: "https://tiles.openfreemap.org/styles/dark",   // free base map, no API key
+  center: [-118.13, 34.19],
+  zoom: 12.3,
+});
+map.addControl(new maplibregl.NavigationControl(), "top-left");
+
+// ---------- loading ----------
+
+async function getJSON(path) {
+  const res = await fetch(REPLAY + path);
+  if (!res.ok) throw new Error(`${path}: ${res.status}. Did you run make export?`);
+  return res.json();
+}
+
+async function step(i) {
+  if (!cache.has(i)) cache.set(i, getJSON(manifest.steps[i].file));
+  return cache.get(i);
+}
+
+// ---------- turning a snapshot into map shapes ----------
+
+const point = (lon, lat, props) =>
+  ({ type: "Feature", geometry: { type: "Point", coordinates: [lon, lat] }, properties: props });
+const collection = (features) => ({ type: "FeatureCollection", features });
+
+function hexes(s) {
+  // Join each forecast row to its hexagon shape by H3 id. Hexes with no forecast stay clear.
+  const byId = new Map(s.outlook.map((o) => [o.h3, o]));
+  return collection(cells.features.filter((f) => byId.has(f.properties.h3)).map((f) => {
+    const o = byId.get(f.properties.h3);
+    return { ...f, properties: { ...o, p: o[horizon] } };
+  }));
+}
+
+function people(s) {
+  const risk = new Map(s.risks.map((r) => [r.resident_id, r]));
+  const escalated = new Set(s.plan.unreachable);
+  return collection(s.residents.map((r) => {
+    const k = risk.get(r.id);
+    const status = s.picked_up[r.id] ? "picked" : escalated.has(r.id) ? "escalated"
+      : k && k.at_risk ? "risk" : "known";
+    return point(r.lon, r.lat, {
+      id: r.id, needs: r.needs, people: r.people, source: r.source, status,
+      priority: k ? k.priority : 0, deadline: k ? k.deadline_min : null,
+      reason: s.plan.reasons[r.id] || "", picked_at: s.picked_up[r.id] || "",
+    });
+  }));
+}
+
+function routes(s) {
+  // Each vehicle's line: where it is now, then each remaining stop (people and shelters).
+  const where = new Map();
+  s.residents.forEach((r) => where.set(r.id, [r.lon, r.lat]));
+  s.shelters.forEach((h) => where.set(h.id, [h.lon, h.lat]));
+  const vehicle = new Map(s.vehicles.map((v) => [v.id, v]));
+  return collection(s.schedule.filter((r) => vehicle.has(r.vehicle)).map((r) => {
+    const v = vehicle.get(r.vehicle);
+    const coords = [[v.lon, v.lat], ...r.stops.map((id) => where.get(id)).filter(Boolean)];
+    return { type: "Feature", geometry: { type: "LineString", coordinates: coords },
+      properties: { vehicle: r.vehicle } };
+  }));
+}
+
+function orders(s) {
+  return collection(s.orders.map((o) => ({ type: "Feature",
+    geometry: { type: "Polygon", coordinates: [o.polygon] },
+    properties: { area: o.area, issued: o.issued_at.slice(11, 16), kind: o.kind } })));
+}
+
+// ---------- map layers (drawn once, data swapped every step) ----------
+
+function addLayers() {
+  for (const id of ["hexes", "orders", "routes", "detections", "reports", "facilities",
+                    "shelters", "people", "vehicles"]) {
+    map.addSource(id, { type: "geojson", data: empty });
+  }
+  map.addLayer({ id: "orders", type: "line", source: "orders",
+    paint: { "line-color": "#f8fafc", "line-width": 2, "line-dasharray": [2, 2] } });
+  map.addLayer({ id: "hexes", type: "fill", source: "hexes", paint: {
+    "fill-color": ["case", ["get", "burning"], "#450a0a",
+      ["step", ["get", "p"], "rgba(0,0,0,0)", 0.05, "#fde68a", 0.25, "#fb923c",
+        0.5, "#ef4444", 0.75, "#b91c1c"]],
+    "fill-opacity": 0.6, "fill-outline-color": "rgba(0,0,0,0.25)" } });
+  map.addLayer({ id: "routes", type: "line", source: "routes",
+    paint: { "line-color": "#ffffff", "line-width": 2, "line-dasharray": [1, 1.5] } });
+  map.addLayer({ id: "detections", type: "circle", source: "detections",
+    paint: { "circle-radius": 3, "circle-color": "#fbbf24" } });
+  map.addLayer({ id: "reports", type: "circle", source: "reports",
+    paint: { "circle-radius": 5, "circle-color": "#ffffff",
+      "circle-stroke-color": "#f59e0b", "circle-stroke-width": 2 } });
+  map.addLayer({ id: "facilities", type: "circle", source: "facilities",
+    paint: { "circle-radius": 11, "circle-color": "rgba(167,139,250,0.25)",
+      "circle-stroke-color": "#a78bfa", "circle-stroke-width": 2 } });
+  map.addLayer({ id: "shelters", type: "circle", source: "shelters",
+    paint: { "circle-radius": 9, "circle-color": "#22c55e",
+      "circle-stroke-color": "#052e16", "circle-stroke-width": 2 } });
+  map.addLayer({ id: "people", type: "circle", source: "people", paint: {
+    "circle-radius": ["match", ["get", "status"],
+      "risk", ["+", 4, ["*", 6, ["get", "priority"]]], "escalated", 7, 4],
+    "circle-color": ["match", ["get", "status"],
+      "picked", "#4ade80", "escalated", "#f43f5e", "risk", "#38bdf8", "#94a3b8"],
+    "circle-stroke-color": ["match", ["get", "status"], "escalated", "#ffffff", "#0f1115"],
+    "circle-stroke-width": ["match", ["get", "status"], "escalated", 2, 1] } });
+  map.addLayer({ id: "vehicles", type: "circle", source: "vehicles",
+    paint: { "circle-radius": 7, "circle-color": "#ffffff",
+      "circle-stroke-color": "#111111", "circle-stroke-width": 3 } });
+
+  // Click anything for its details.
+  popup("people", (p) => `<b>${p.id}</b> · ${p.people} person(s) · needs: ${p.needs}<br>
+    known from: ${p.source}<br>status: <b>${p.status}</b>${p.picked_at ? " at " + p.picked_at.slice(11, 16) : ""}
+    ${p.deadline !== null && p.status !== "picked" ? `<br>pickup deadline: ${Math.round(p.deadline)} min` : ""}
+    ${p.reason ? `<br><i>${p.reason}</i>` : ""}`);
+  popup("vehicles", (p) => `<b>${p.id}</b> · ${p.type}<br>${p.status}`);
+  popup("hexes", (p) => `Fire within 1 h / 2 h / 3 h:<br><b>${pct(p.p_1h)} / ${pct(p.p_2h)} / ${pct(p.p_3h)}</b>
+    ${p.burning ? "<br>burning now" : ""}`);
+  popup("facilities", (p) => `<b>${p.name}</b><br>licensed for ${p.licensed_capacity}`);
+  popup("shelters", (p) => `<b>${p.name}</b>`);
+  popup("reports", (p) => `<b>Fire report ${p.reported_at.slice(11, 16)}</b><br>${p.description}`);
+}
+
+// One popup per click: the topmost thing under the mouse (a person beats the hexagon under them).
+const popups = new Map();   // layer -> function that writes its popup
+function popup(layer, html) {
+  popups.set(layer, html);
+  map.on("mouseenter", layer, () => (map.getCanvas().style.cursor = "pointer"));
+  map.on("mouseleave", layer, () => (map.getCanvas().style.cursor = ""));
+}
+const ON_TOP = ["vehicles", "people", "shelters", "facilities", "reports", "hexes"];
+map.on("click", (e) => {
+  for (const layer of ON_TOP) {
+    const hit = popups.has(layer) && map.queryRenderedFeatures(e.point, { layers: [layer] })[0];
+    if (hit) {
+      new maplibregl.Popup().setLngLat(e.lngLat).setHTML(popups.get(layer)(hit.properties)).addTo(map);
+      return;
+    }
+  }
+});
+
+const pct = (x) => `${Math.round(x * 100)}%`;
+
+// ---------- drawing one snapshot ----------
+
+function draw(s) {
+  current = s;
+  const set = (id, data) => map.getSource(id).setData(data);
+  set("hexes", hexes(s));
+  set("orders", orders(s));
+  set("routes", routes(s));
+  set("detections", collection(s.detections.map((d) => point(d.lon, d.lat, d))));
+  set("reports", collection(s.reports.map((r) => point(r.lon, r.lat, r))));
+  set("facilities", collection(s.facilities.map((f) => point(f.lon, f.lat, f))));
+  set("shelters", collection(s.shelters.map((h) => point(h.lon, h.lat, h))));
+  set("people", people(s));
+  set("vehicles", collection(s.vehicles.map((v) => point(v.lon, v.lat, v))));
+
+  const day = s.t.slice(5, 10) === "01-07" ? "Jan 7" : "Jan 8";
+  document.getElementById("clock").innerHTML =
+    `${s.t.slice(11, 16)}<small>${day} · known at this time, no hindsight</small>`;
+  document.getElementById("n-known").textContent = s.residents.length;
+  document.getElementById("n-risk").textContent = s.risks.filter((r) => r.at_risk).length;
+  document.getElementById("n-picked").textContent = Object.keys(s.picked_up).length;
+  document.getElementById("n-esc").textContent = s.plan.unreachable.length;
+
+  document.getElementById("vehicles").innerHTML = s.vehicles.map((v) => {
+    const run = s.schedule.find((r) => r.vehicle === v.id);
+    const next = run && run.stops.length
+      ? run.stops.map((id, k) => `${id} (${Math.round(run.eta_min[k])} min)`).join(" → ")
+      : "no stops";
+    return `<li><span class="who">${v.id}</span> · ${v.type.replace("_", " ")}<br>
+      <span class="why">${next}</span></li>`;
+  }).join("");
+
+  document.getElementById("escalations").innerHTML = s.plan.unreachable.length
+    ? s.plan.unreachable.map((id) => `<li><span class="who">${id}</span><br>
+        <span class="why">${s.plan.reasons[id] || ""}</span></li>`).join("")
+    : `<li class="why">None right now.</li>`;
+}
+
+async function show(i) {
+  document.getElementById("slider").value = i;
+  draw(await step(i));
+  if (i + 1 < manifest.steps.length) step(i + 1);   // fetch the next snapshot in the background
+}
+
+// ---------- controls ----------
+
+let timer = null;
+document.getElementById("play").onclick = (e) => {
+  if (timer) { clearInterval(timer); timer = null; e.target.textContent = "▶ Play"; return; }
+  e.target.textContent = "⏸ Pause";
+  timer = setInterval(() => {
+    const i = Number(document.getElementById("slider").value) + 1;
+    if (i >= manifest.steps.length) { document.getElementById("play").click(); return; }
+    show(i);
+  }, 700);
+};
+document.getElementById("slider").oninput = (e) => show(Number(e.target.value));
+document.querySelectorAll("#horizon button").forEach((b) => (b.onclick = () => {
+  document.querySelectorAll("#horizon button").forEach((x) => x.classList.toggle("on", x === b));
+  horizon = b.dataset.h;
+  if (current) map.getSource("hexes").setData(hexes(current));
+}));
+
+// ---------- start ----------
+
+map.on("load", async () => {
+  try {
+    manifest = await getJSON("manifest.json");
+    cells = await getJSON(manifest.cells);
+  } catch (err) {
+    document.getElementById("foot").textContent = String(err);
+    return;
+  }
+  if (!manifest.dataset.includes("fake")) document.getElementById("fake-badge").textContent =
+    "Placeholder for the real dashboard";
+  document.getElementById("slider").max = manifest.steps.length - 1;
+  addLayers();
+  await show(0);
+  fitAll(current);
+});
+
+function fitAll(s) {
+  // Frame the study area plus the shelters and vehicle depots, which sit outside it.
+  const b = new maplibregl.LngLatBounds();
+  cells.features.forEach((f) => f.geometry.coordinates[0].forEach((c) => b.extend(c)));
+  [...s.shelters, ...s.vehicles].forEach((x) => b.extend([x.lon, x.lat]));
+  map.fitBounds(b, { padding: 30, duration: 0 });
+}
+</script>
+</body>
+</html>
