@@ -95,7 +95,10 @@ def create_app(store: DataStore | None = None, log_path: Path | None = None) -> 
     logged_plans: set[str] = set()
     sockets: set[WebSocket] = set()
 
-    public_url = os.environ.get("OUTRUN_PUBLIC_URL", "http://localhost:8000")
+    # The address Orchestrate calls (it's written into the OpenAPI spec). Render sets
+    # RENDER_EXTERNAL_URL itself; OUTRUN_PUBLIC_URL overrides it (e.g. for a tunnel).
+    public_url = (os.environ.get("OUTRUN_PUBLIC_URL") or os.environ.get("RENDER_EXTERNAL_URL")
+                  or "http://localhost:8000")
     app = FastAPI(
         title="Outrun API",
         version="0.1.0",

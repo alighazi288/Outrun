@@ -1,0 +1,16 @@
+# Render Blueprint: the live API that Orchestrate agents and the dashboard's live features call.
+# Python version comes from .python-version; dependencies from uv.lock.
+# The public link judges open is the static replay, so it never depends on this service.
+services:
+  - type: web
+    name: outrun-api
+    runtime: python
+    plan: free                      # sleeps after 15 min idle; the first request wakes it (~1 min)
+    region: oregon
+    buildCommand: uv sync --frozen --no-dev
+    startCommand: uv run --no-dev outrun-api
+    healthCheckPath: /health
+    autoDeployTrigger: checksPass   # redeploy on every push to main, once CI is green
+    envVars:
+      - key: OUTRUN_DATASET
+        value: fixtures             # fake data until the real dataset exists

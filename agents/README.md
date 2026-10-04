@@ -32,9 +32,8 @@ week 5, if we're ahead.
 
 ## Connecting Orchestrate to our backend
 
-Orchestrate calls our API over the internet, so the API needs a public URL: IBM Code Engine if the
-team account has it, else Render's free tier. A Cloudflare quick tunnel
-(`cloudflared tunnel --url http://localhost:8000`) for development ONLY.
+Orchestrate calls our API over the internet, so the API needs a public URL. It runs on Render's free tier, set up by `render.yaml`. A Cloudflare quick tunnel
+(`cloudflared tunnel --url http://localhost:8000`) is for development ONLY.
 
 ```bash
 OUTRUN_PUBLIC_URL=https://<public-host> uv run python scripts/export_openapi.py
