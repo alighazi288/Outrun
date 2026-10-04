@@ -35,12 +35,17 @@ week 5, if we're ahead.
 Orchestrate calls our API over the internet, so the API needs a public URL. It runs on Render's free tier, set up by `render.yaml`. A Cloudflare quick tunnel
 (`cloudflared tunnel --url http://localhost:8000`) is for development ONLY.
 
+Orchestrate imports `agents/tools.openapi.json`, not `backend/openapi.json`: it needs OpenAPI 3.0,
+one server URL and a description per endpoint, and only the agent tools. `make openapi` writes it
+(`backend/api/tools_spec.py`).
+
 ```bash
-OUTRUN_PUBLIC_URL=https://<public-host> uv run python scripts/export_openapi.py
-pip install ibm-watsonx-orchestrate
-orchestrate env add -n outrun -u <WXO_INSTANCE_URL>
-orchestrate env activate outrun --api-key <WXO_API_KEY>
-orchestrate tools import -k openapi -f backend/openapi.json
+make openapi                                      # refresh agents/tools.openapi.json
+uv tool install ibm-watsonx-orchestrate           # the `orchestrate` CLI (ADK)
+set -a; source .env; set +a                       # WXO_INSTANCE_URL, WXO_API_KEY from .env
+orchestrate env add -n outrun -u "$WXO_INSTANCE_URL" --type ibm_iam
+orchestrate env activate outrun --api-key "$WXO_API_KEY"
+orchestrate tools import -k openapi -f agents/tools.openapi.json
 orchestrate agents import -f agents/intake.yaml
 orchestrate agents import -f agents/dispatch.yaml
 ```

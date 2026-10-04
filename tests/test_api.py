@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 
 from backend.api.main import create_app
+from backend.store import REPO_ROOT
 
 EXPECTED_TOOLS = {
     "get_fire_outlook", "get_residents_at_risk", "get_current_plan",
@@ -41,6 +44,15 @@ def test_openapi_tool_names(client):
     spec = client.get("/openapi.json").json()
     ops = {op["operationId"] for path in spec["paths"].values() for op in path.values()}
     assert EXPECTED_TOOLS <= ops
+
+
+def test_committed_openapi_is_up_to_date():
+    """backend/openapi.json must match the code (the dashboard reads it). If this fails:
+    make openapi."""
+    committed = json.loads((REPO_ROOT / "backend" / "openapi.json").read_text())
+    current = create_app().openapi()
+    committed.pop("servers"), current.pop("servers")  # depends on where it was generated
+    assert committed == current
 
 
 def test_help_request_respects_time(client):

@@ -266,14 +266,21 @@ def create_app(store: DataStore | None = None, log_path: Path | None = None) -> 
         await broadcast()
         return report
 
-    @app.post("/decisions", operation_id="record_decision", status_code=201,
-              summary="Record what the emergency manager did with a plan")
+    @app.post(
+        "/decisions",
+        operation_id="record_decision",
+        status_code=201,
+        summary="Record what the emergency manager did with a plan",
+        description="Call only after the emergency manager explicitly says approve, modify or "
+        "reject, with the plan_id from get_current_plan. Never approve on your own.",
+    )
     async def record_decision(d: Decision) -> Decision:
         log.record("decision", d)
         await broadcast()
         return d
 
-    @app.get("/decisions", operation_id="list_decisions", summary="All recorded decisions")
+    @app.get("/decisions", operation_id="list_decisions", summary="All recorded decisions",
+             description="Every approve, modify or reject decision recorded so far, in order.")
     def list_decisions() -> list[Decision]:
         return log.decisions
 

@@ -1,5 +1,5 @@
 {
-  "openapi": "3.1.0",
+  "openapi": "3.0.3",
   "info": {
     "title": "Outrun API",
     "description": "Wildfire evacuation dispatch for residents who can't evacuate alone. Every number comes from an engine; agents call these tools and explain results.",
@@ -7,157 +7,10 @@
   },
   "servers": [
     {
-      "url": "http://localhost:8000"
+      "url": "https://outrun-api.onrender.com"
     }
   ],
   "paths": {
-    "/health": {
-      "get": {
-        "summary": "Health",
-        "operationId": "health",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "type": "object",
-                  "title": "Response Health"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/clock": {
-      "get": {
-        "summary": "Current replay time",
-        "operationId": "get_clock",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ClockInfo"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/clock/step": {
-      "post": {
-        "summary": "Advance the replay clock",
-        "operationId": "step_clock",
-        "parameters": [
-          {
-            "name": "n",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "maximum": 100,
-              "minimum": 1,
-              "default": 1,
-              "title": "N"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ClockInfo"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/clock/reset": {
-      "post": {
-        "summary": "Rewind to the start",
-        "operationId": "reset_clock",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ClockInfo"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/state": {
-      "get": {
-        "summary": "Everything the dashboard shows at time t",
-        "operationId": "get_world_state",
-        "parameters": [
-          {
-            "name": "t",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Replay time, ISO-8601 with offset, e.g. 2025-01-07T23:40:00-08:00. Omit to use the replay clock's current time.",
-              "title": "T"
-            },
-            "description": "Replay time, ISO-8601 with offset, e.g. 2025-01-07T23:40:00-08:00. Omit to use the replay clock's current time."
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/WorldState"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/fire/outlook": {
       "get": {
         "summary": "Where the fire is likely to be in the next 1, 2 and 3 hours",
@@ -169,17 +22,11 @@
             "in": "query",
             "required": false,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
+              "format": "date-time",
               "description": "Replay time, ISO-8601 with offset, e.g. 2025-01-07T23:40:00-08:00. Omit to use the replay clock's current time.",
-              "title": "T"
+              "title": "T",
+              "nullable": true
             },
             "description": "Replay time, ISO-8601 with offset, e.g. 2025-01-07T23:40:00-08:00. Omit to use the replay clock's current time."
           },
@@ -231,17 +78,11 @@
             "in": "query",
             "required": false,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
+              "format": "date-time",
               "description": "Replay time, ISO-8601 with offset, e.g. 2025-01-07T23:40:00-08:00. Omit to use the replay clock's current time.",
-              "title": "T"
+              "title": "T",
+              "nullable": true
             },
             "description": "Replay time, ISO-8601 with offset, e.g. 2025-01-07T23:40:00-08:00. Omit to use the replay clock's current time."
           },
@@ -297,17 +138,11 @@
             "in": "query",
             "required": false,
             "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                {
-                  "type": "null"
-                }
-              ],
+              "type": "string",
+              "format": "date-time",
               "description": "Replay time, ISO-8601 with offset, e.g. 2025-01-07T23:40:00-08:00. Omit to use the replay clock's current time.",
-              "title": "T"
+              "title": "T",
+              "nullable": true
             },
             "description": "Replay time, ISO-8601 with offset, e.g. 2025-01-07T23:40:00-08:00. Omit to use the replay clock's current time."
           }
@@ -512,26 +347,14 @@
             "title": "P 3H"
           },
           "arrival_p10_min": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Arrival P10 Min"
+            "type": "number",
+            "title": "Arrival P10 Min",
+            "nullable": true
           },
           "deadline_min": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Deadline Min"
+            "type": "number",
+            "title": "Deadline Min",
+            "nullable": true
           },
           "priority": {
             "type": "number",
@@ -553,37 +376,6 @@
           "priority"
         ],
         "title": "AtRiskEntry"
-      },
-      "ClockInfo": {
-        "properties": {
-          "start": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Start"
-          },
-          "end": {
-            "type": "string",
-            "format": "date-time",
-            "title": "End"
-          },
-          "step_minutes": {
-            "type": "integer",
-            "title": "Step Minutes"
-          },
-          "now": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Now"
-          }
-        },
-        "type": "object",
-        "required": [
-          "start",
-          "end",
-          "step_minutes",
-          "now"
-        ],
-        "title": "ClockInfo"
       },
       "Decision": {
         "properties": {
@@ -619,15 +411,9 @@
             "default": []
           },
           "reason": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Reason"
+            "type": "string",
+            "title": "Reason",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -639,197 +425,6 @@
         ],
         "title": "Decision",
         "description": "What the emergency manager did with a plan."
-      },
-      "EvacOrder": {
-        "properties": {
-          "zone_id": {
-            "type": "string",
-            "title": "Zone Id"
-          },
-          "kind": {
-            "type": "string",
-            "enum": [
-              "warning",
-              "order"
-            ],
-            "title": "Kind"
-          },
-          "issued_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Issued At"
-          },
-          "area": {
-            "type": "string",
-            "title": "Area",
-            "description": "Human-readable area name"
-          },
-          "polygon": {
-            "anyOf": [
-              {
-                "items": {
-                  "items": {
-                    "type": "number"
-                  },
-                  "type": "array"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Polygon",
-            "description": "Zone outline as [lon, lat] pairs (GeoJSON order)"
-          },
-          "source": {
-            "type": "string",
-            "title": "Source",
-            "description": "Where this time came from (URL or citation)"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "zone_id",
-          "kind",
-          "issued_at",
-          "area",
-          "source"
-        ],
-        "title": "EvacOrder",
-        "description": "A real evacuation warning or order, hand-mapped from after-action reviews."
-      },
-      "Facility": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "kind": {
-            "type": "string",
-            "title": "Kind",
-            "description": "License type, e.g. residential care for the elderly"
-          },
-          "lat": {
-            "type": "number",
-            "title": "Lat"
-          },
-          "lon": {
-            "type": "number",
-            "title": "Lon"
-          },
-          "h3": {
-            "type": "string",
-            "title": "H3"
-          },
-          "licensed_capacity": {
-            "type": "integer",
-            "minimum": 0.0,
-            "title": "Licensed Capacity"
-          },
-          "source": {
-            "type": "string",
-            "title": "Source"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "id",
-          "name",
-          "kind",
-          "lat",
-          "lon",
-          "h3",
-          "licensed_capacity",
-          "source"
-        ],
-        "title": "Facility",
-        "description": "A real licensed care facility (California Community Care Licensing data)."
-      },
-      "FireDetection": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "lat": {
-            "type": "number",
-            "title": "Lat"
-          },
-          "lon": {
-            "type": "number",
-            "title": "Lon"
-          },
-          "h3": {
-            "type": "string",
-            "title": "H3"
-          },
-          "observed_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Observed At",
-            "description": "Satellite overpass time"
-          },
-          "available_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Available At",
-            "description": "When the detection was published. FIRMS near-real-time data arrives with a delay, so a detection observed at 22:00 may not be usable until later."
-          },
-          "source": {
-            "type": "string",
-            "title": "Source",
-            "description": "Satellite / instrument",
-            "default": "VIIRS_SNPP"
-          },
-          "frp_mw": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Frp Mw",
-            "description": "Fire radiative power, megawatts"
-          },
-          "confidence": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Confidence"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "id",
-          "lat",
-          "lon",
-          "h3",
-          "observed_at"
-        ],
-        "title": "FireDetection",
-        "description": "One satellite fire detection (NASA FIRMS)."
       },
       "FireOutlook": {
         "properties": {
@@ -862,16 +457,10 @@
             "title": "P 3H"
           },
           "arrival_p10_min": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
+            "type": "number",
             "title": "Arrival P10 Min",
-            "description": "Pessimistic arrival: 10% chance the fire arrives sooner than this many minutes after t. None = not expected within the forecast horizon."
+            "description": "Pessimistic arrival: 10% chance the fire arrives sooner than this many minutes after t. None = not expected within the forecast horizon.",
+            "nullable": true
           },
           "burning": {
             "type": "boolean",
@@ -973,15 +562,9 @@
             "default": 250.0
           },
           "raw_text": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Raw Text"
+            "type": "string",
+            "title": "Raw Text",
+            "nullable": true
           }
         },
         "type": "object",
@@ -1040,41 +623,21 @@
             "default": 1
           },
           "address": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Address"
+            "type": "string",
+            "title": "Address",
+            "nullable": true
           },
           "notes": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
+            "type": "string",
             "title": "Notes",
-            "examples": [
-              "on oxygen, 2nd floor"
-            ]
+            "nullable": true,
+            "example": "on oxygen, 2nd floor"
           },
           "raw_text": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
+            "type": "string",
             "title": "Raw Text",
-            "description": "Original message, kept for audit"
+            "description": "Original message, kept for audit",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -1145,9 +708,7 @@
           "plan_id": {
             "type": "string",
             "title": "Plan Id",
-            "examples": [
-              "p_20250107T2340"
-            ]
+            "example": "p_20250107T2340"
           },
           "routes": {
             "items": {
@@ -1211,37 +772,19 @@
             "title": "Kind"
           },
           "resident": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Resident"
+            "type": "string",
+            "title": "Resident",
+            "nullable": true
           },
           "vehicle": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Vehicle"
+            "type": "string",
+            "title": "Vehicle",
+            "nullable": true
           },
           "note": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Note"
+            "type": "string",
+            "title": "Note",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -1257,9 +800,7 @@
           "id": {
             "type": "string",
             "title": "Id",
-            "examples": [
-              "r_0412"
-            ]
+            "example": "r_0412"
           },
           "lat": {
             "type": "number",
@@ -1324,38 +865,20 @@
             "default": "registry"
           },
           "known_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Known At"
+            "type": "string",
+            "format": "date-time",
+            "title": "Known At",
+            "nullable": true
           },
           "notes": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Notes"
+            "type": "string",
+            "title": "Notes",
+            "nullable": true
           },
           "facility_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Facility Id"
+            "type": "string",
+            "title": "Facility Id",
+            "nullable": true
           }
         },
         "additionalProperties": false,
@@ -1371,84 +894,6 @@
         ],
         "title": "Resident",
         "description": "One person who may need help evacuating. Care-facility residents come from real licensed\nfacilities; everyone else is estimated from Census counts (real addresses are not public)."
-      },
-      "ResidentRisk": {
-        "properties": {
-          "resident_id": {
-            "type": "string",
-            "title": "Resident Id"
-          },
-          "t": {
-            "type": "string",
-            "format": "date-time",
-            "title": "T"
-          },
-          "p_1h": {
-            "type": "number",
-            "maximum": 1.0,
-            "minimum": 0.0,
-            "title": "P 1H"
-          },
-          "p_2h": {
-            "type": "number",
-            "maximum": 1.0,
-            "minimum": 0.0,
-            "title": "P 2H"
-          },
-          "p_3h": {
-            "type": "number",
-            "maximum": 1.0,
-            "minimum": 0.0,
-            "title": "P 3H"
-          },
-          "arrival_p10_min": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Arrival P10 Min"
-          },
-          "deadline_min": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Deadline Min",
-            "description": "Pick up within this many minutes after t. None = no deadline in horizon"
-          },
-          "priority": {
-            "type": "number",
-            "minimum": 0.0,
-            "title": "Priority",
-            "description": "Higher = more urgent"
-          },
-          "at_risk": {
-            "type": "boolean",
-            "title": "At Risk",
-            "description": "True = the router must route or escalate this person"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "resident_id",
-          "t",
-          "p_1h",
-          "p_2h",
-          "p_3h",
-          "priority",
-          "at_risk"
-        ],
-        "title": "ResidentRisk",
-        "description": "Risk engine output for one resident at time t."
       },
       "Route": {
         "properties": {
@@ -1481,47 +926,6 @@
         ],
         "title": "Route",
         "description": "One vehicle's ordered stops. Stops are resident ids and shelter ids."
-      },
-      "Shelter": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "lat": {
-            "type": "number",
-            "title": "Lat"
-          },
-          "lon": {
-            "type": "number",
-            "title": "Lon"
-          },
-          "capacity": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Capacity"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "id",
-          "name",
-          "lat",
-          "lon"
-        ],
-        "title": "Shelter",
-        "description": "A drop-off point."
       },
       "ValidationError": {
         "properties": {
@@ -1562,224 +966,6 @@
           "type"
         ],
         "title": "ValidationError"
-      },
-      "Vehicle": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id",
-            "examples": [
-              "v_03"
-            ]
-          },
-          "type": {
-            "type": "string",
-            "enum": [
-              "wheelchair_van",
-              "ambulance",
-              "bus"
-            ],
-            "title": "Type"
-          },
-          "seats": {
-            "type": "integer",
-            "minimum": 0.0,
-            "title": "Seats"
-          },
-          "wheelchair_spaces": {
-            "type": "integer",
-            "minimum": 0.0,
-            "title": "Wheelchair Spaces",
-            "default": 0
-          },
-          "stretcher_spaces": {
-            "type": "integer",
-            "minimum": 0.0,
-            "title": "Stretcher Spaces",
-            "default": 0
-          },
-          "lat": {
-            "type": "number",
-            "title": "Lat"
-          },
-          "lon": {
-            "type": "number",
-            "title": "Lon"
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "idle",
-              "en_route",
-              "loading"
-            ],
-            "title": "Status",
-            "default": "idle"
-          },
-          "depot": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Depot"
-          },
-          "available_in_min": {
-            "type": "number",
-            "minimum": 0.0,
-            "title": "Available In Min",
-            "default": 0.0
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "id",
-          "type",
-          "seats",
-          "lat",
-          "lon"
-        ],
-        "title": "Vehicle",
-        "description": "One vehicle in the rescue fleet."
-      },
-      "WorldState": {
-        "properties": {
-          "t": {
-            "type": "string",
-            "format": "date-time",
-            "title": "T"
-          },
-          "dataset": {
-            "type": "string",
-            "title": "Dataset"
-          },
-          "residents": {
-            "items": {
-              "$ref": "#/components/schemas/Resident"
-            },
-            "type": "array",
-            "title": "Residents"
-          },
-          "vehicles": {
-            "items": {
-              "$ref": "#/components/schemas/Vehicle"
-            },
-            "type": "array",
-            "title": "Vehicles"
-          },
-          "shelters": {
-            "items": {
-              "$ref": "#/components/schemas/Shelter"
-            },
-            "type": "array",
-            "title": "Shelters"
-          },
-          "detections": {
-            "items": {
-              "$ref": "#/components/schemas/FireDetection"
-            },
-            "type": "array",
-            "title": "Detections"
-          },
-          "reports": {
-            "items": {
-              "$ref": "#/components/schemas/FireReport"
-            },
-            "type": "array",
-            "title": "Reports"
-          },
-          "facilities": {
-            "items": {
-              "$ref": "#/components/schemas/Facility"
-            },
-            "type": "array",
-            "title": "Facilities"
-          },
-          "orders": {
-            "items": {
-              "$ref": "#/components/schemas/EvacOrder"
-            },
-            "type": "array",
-            "title": "Orders"
-          },
-          "outlook": {
-            "items": {
-              "$ref": "#/components/schemas/FireOutlook"
-            },
-            "type": "array",
-            "title": "Outlook"
-          },
-          "risks": {
-            "items": {
-              "$ref": "#/components/schemas/ResidentRisk"
-            },
-            "type": "array",
-            "title": "Risks"
-          },
-          "plan": {
-            "$ref": "#/components/schemas/Plan"
-          },
-          "decisions": {
-            "items": {
-              "$ref": "#/components/schemas/Decision"
-            },
-            "type": "array",
-            "title": "Decisions"
-          },
-          "picked_up": {
-            "additionalProperties": {
-              "type": "string",
-              "format": "date-time"
-            },
-            "type": "object",
-            "title": "Picked Up",
-            "description": "Resident id -> when a vehicle left with them"
-          },
-          "schedule": {
-            "items": {
-              "$ref": "#/components/schemas/Route"
-            },
-            "type": "array",
-            "title": "Schedule",
-            "description": "What each vehicle is actually doing: remaining approved stops, ETAs in minutes after t"
-          },
-          "plan_takes_effect_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Plan Takes Effect At",
-            "description": "When the plan above is approved and vehicles start following it"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "t",
-          "dataset",
-          "residents",
-          "vehicles",
-          "shelters",
-          "detections",
-          "reports",
-          "facilities",
-          "orders",
-          "outlook",
-          "risks",
-          "plan",
-          "decisions"
-        ],
-        "title": "WorldState",
-        "description": "Everything the dashboard needs at time t, in one message."
       }
     }
   }
