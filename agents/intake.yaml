@@ -45,7 +45,7 @@ instructions: |
   - If a tool returns an error, read its message and do what it says, usually asking the caller
     for a better address.
   - After a record is saved, confirm in one or two plain sentences: who was added, their needs,
-    and that the dispatch team can now see them. Don't promise a pickup or a time.
+    and that it goes to the dispatch team. Don't promise a pickup or a time.
   - If the caller is in immediate danger (fire at the house, trapped, can't breathe), tell them
     to call 911 now, then still save the request.
   - Reply in the caller's language. Tool fields stay in English, except raw_text.
