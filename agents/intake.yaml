@@ -9,6 +9,9 @@ description: >
   Turns a free-text help call or fire sighting from the Eaton Fire area into a validated record
   in Outrun's evacuation plan. Use it whenever someone describes a person who needs a ride out of
   the fire area, or reports seeing fire.
+# Orchestrate's default and IBM's recommended model for react_core. We tried
+# watsonx/ibm/granite-4-h-small on Oct 4: it replied "I did not understand your question" to a
+# plain help request, because react_core needs the model's native tool calling.
 llm: groq/openai/gpt-oss-120b
 style: react_core
 instructions: |

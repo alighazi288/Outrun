@@ -13,7 +13,7 @@ from backend.store import REPO_ROOT
 EXPECTED_TOOLS = {
     "get_fire_outlook", "get_residents_at_risk", "get_current_plan",
     "submit_help_request", "submit_fire_report", "record_decision", "list_decisions",
-    "get_world_state",
+    "get_world_state", "get_vehicle_runs",
 }
 
 
@@ -159,3 +159,13 @@ def test_fire_report_by_address(client):
     body = {"address": "2260 N Lake Ave, Altadena, CA", "description": "flames behind houses"}
     r = client.post("/reports", json=body)
     assert r.status_code == 201 and r.json()["reported_at"] == "2025-01-07T18:00:00-08:00"
+
+
+def test_vehicle_runs_show_work_already_in_progress(client):
+    runs = client.get("/vehicles", params={"t": "2025-01-07T19:00:00-08:00"}).json()
+    assert len(runs) == 5
+    busy = [r for r in runs if r["stops"]]
+    assert busy, "at 19:00 vehicles are out picking people up"
+    for r in busy:
+        assert len(r["stops"]) == len(r["eta_min"])
+        assert r["stops"][-1].startswith("shelter")

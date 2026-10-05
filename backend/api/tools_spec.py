@@ -25,6 +25,7 @@ AGENT_TOOLS = {
     "get_fire_outlook",
     "get_residents_at_risk",
     "get_current_plan",
+    "get_vehicle_runs",
     "record_decision",
     "list_decisions",
     "submit_help_request",

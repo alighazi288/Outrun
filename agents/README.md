@@ -11,11 +11,13 @@ number it doesn't have, it calls a tool; if no tool has it, it says so.
 
 ## Two agents
 
-Both run on the same IBM Granite model in our Orchestrate instance.
+Both run on `groq/openai/gpt-oss-120b`, Orchestrate's default and IBM's recommended model for the
+`react_core` agent style. IBM Granite 4 (`watsonx/ibm/granite-4-h-small`) is in our instance, but
+failed a plain help request in that style (Oct 4), so the model line stays swappable.
 
-| Agent | Job | Tools (operationIds in `backend/openapi.json`) |
+| Agent | Job | Tools (operationIds in `agents/tools.openapi.json`) |
 |---|---|---|
-| **Dispatch** (the manager's entry point) | Explains the plan and the fire situation using tool outputs only. Flags escalations (`unreachable`). Asks the manager to approve or change the plan and records the answer. **Never records `approve` on its own.** | `get_fire_outlook`, `get_residents_at_risk`, `get_current_plan`, `record_decision`, `list_decisions` |
+| **Dispatch** (the manager's entry point) | Explains the plan and the fire situation using tool outputs only. Flags escalations (`unreachable`). Asks the manager to approve or change the plan and records the answer. **Never records `approve` on its own.** | `get_fire_outlook`, `get_residents_at_risk`, `get_vehicle_runs`, `get_current_plan`, `record_decision`, `list_decisions` |
 | **Intake** (Dispatch's collaborator) | Turns messy text into validated records: help requests ("my dad's on oxygen, 2nd floor") and fire reports ("flames behind the houses on Mariposa"). Asks a follow-up if location or needs are unclear. The backend fills in every number. | `submit_help_request`, `submit_fire_report` |
 
 Why only two:
@@ -50,31 +52,21 @@ orchestrate agents import -f agents/intake.yaml
 orchestrate agents import -f agents/dispatch.yaml
 ```
 
-## Agent file sketch
+## Agent files
 
-Proposed but we need to verify the field names against the current ADK docs.
+- `intake.yaml`: `outrun_intake`. Passes addresses, never coordinates or times; the backend looks
+  them up (`backend/geocode.py`, US Census geocoder) and returns errors that say what to ask.
+- `dispatch.yaml`: `outrun_dispatch`, with Intake as collaborator (import Intake first). Reads
+  `get_vehicle_runs` for runs in progress and `get_current_plan` for new assignments.
 
-```yaml
-spec_version: v1
-kind: native
-name: outrun_dispatch
-description: Explains the evacuation plan to the emergency manager and records their decision.
-instructions: >
-  Always call tools before answering. Quote only numbers returned by tools; never estimate.
-  Explain routes vehicle by vehicle with the reason given for each person, and list everyone in
-  `unreachable` as needing escalation. Never call record_decision until the manager explicitly
-  says approve, modify or reject.
-llm: watsonx/ibm/<granite-model-available-in-our-instance>
-style: default
-collaborators:
-  - outrun_intake
-tools:
-  - get_fire_outlook
-  - get_residents_at_risk
-  - get_current_plan
-  - record_decision
-  - list_decisions
+Check a file offline before importing (uses the ADK's own validator):
+
+```bash
+~/.local/share/uv/tools/ibm-watsonx-orchestrate/bin/python -c "from ibm_watsonx_orchestrate.agent_builder.agents import Agent; print(Agent.from_spec('agents/dispatch.yaml').name)"
 ```
+
+The IBM login from `env activate` lasts about an hour; run it again when a command says the token
+expired.
 
 ## How the agents are tested
 

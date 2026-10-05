@@ -96,6 +96,17 @@ class AtRiskEntry(BaseModel):
     priority: float
 
 
+class VehicleRun(BaseModel):
+    """What one vehicle is doing at time t."""
+
+    vehicle: str
+    type: str
+    status: str
+    free_in_min: float = Field(description="Minutes until it finishes its current run")
+    stops: list[str] = Field(description="Remaining stops in order: resident ids, then a shelter")
+    eta_min: list[float] = Field(description="Minutes after t until each stop")
+
+
 def create_app(store: DataStore | None = None, log_path: Path | None = None,
                geocode: Geocoder = census_geocode) -> FastAPI:
     store = store or DataStore.from_env()
@@ -240,8 +251,9 @@ def create_app(store: DataStore | None = None, log_path: Path | None = None,
         "/plan",
         operation_id="get_current_plan",
         summary="The proposed rescue plan at time t",
-        description="Routes per vehicle with ETAs, people no vehicle can reach in time "
-        "(unreachable, must be escalated), and a reason per person.",
+        description="New assignments waiting for approval (routes per vehicle with ETAs), people "
+        "no vehicle can reach in time (unreachable, must be escalated) and a reason per person. "
+        "Vehicles keep the run they are already on; see get_vehicle_runs for those.",
     )
     def get_plan(t: datetime | None = T_QUERY) -> Plan:
         plan = sim.step(at(t)).plan
@@ -249,6 +261,25 @@ def create_app(store: DataStore | None = None, log_path: Path | None = None,
             logged_plans.add(plan.plan_id)
             log.record("plan", plan)
         return plan
+
+    @app.get(
+        "/vehicles",
+        operation_id="get_vehicle_runs",
+        summary="What each vehicle is doing now",
+        description="Every vehicle with its status and the run it is already driving: remaining "
+        "stops in order (resident ids, then a shelter) with ETAs in minutes after t. These runs "
+        "are approved and in progress; get_current_plan only holds new assignments.",
+    )
+    def get_vehicle_runs(t: datetime | None = T_QUERY) -> list[VehicleRun]:
+        frame = sim.step(at(t))
+        runs = {r.vehicle: r for r in frame.schedule}
+        return [
+            VehicleRun(vehicle=v.id, type=v.type, status=v.status,
+                       free_in_min=v.available_in_min,
+                       stops=runs[v.id].stops if v.id in runs else [],
+                       eta_min=runs[v.id].eta_min if v.id in runs else [])
+            for v in frame.vehicles
+        ]
 
     @app.post(
         "/requests",
