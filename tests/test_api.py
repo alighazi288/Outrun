@@ -136,6 +136,7 @@ def test_help_request_by_address_uses_looked_up_coordinates(client):
     r = client.post("/requests", json=body)
     assert r.status_code == 201
     assert (r.json()["lat"], r.json()["lon"]) == ADDRESSES["2260 N Lake Ave, Altadena, CA"]
+    assert r.json()["address"] == "2260 N Lake Ave, Altadena, CA"
     # No time given: the call came in at the replay clock's current time (18:00).
     assert r.json()["known_at"] == "2025-01-07T18:15:00-08:00"
 

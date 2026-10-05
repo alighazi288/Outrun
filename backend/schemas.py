@@ -9,17 +9,24 @@ Conventions
   Naive datetimes are rejected on purpose (they cause silent hindsight bugs).
 - Map cells are Uber H3 at resolution 9 (roughly one city block), as hex strings.
 - Durations are minutes. Distances are metres. Probabilities are 0..1.
-- Fields marked PROPOSED are additions to the brief's draft formats. Confirm them in Meeting 1.
+- Locked on 2026-10-05. Changing a field now needs a heads-up to the team first.
+- Data files hold facts only. Assumed publish delays (backend/assumptions.py) are applied when
+  a record is read, so the evaluation can test other delays without rebuilding files.
 """
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
-from backend.assumptions import NEED_PROFILES  # noqa: F401  (re-exported for callers)
+from backend.assumptions import (
+    FIRMS_LATENCY_MIN,
+    GOES_LATENCY_MIN,
+    HRRR_PUBLISH_LAG_MIN,
+    NEED_PROFILES,  # noqa: F401  (re-exported for callers)
+)
 
 H3_RES = 9
 
@@ -70,12 +77,15 @@ class Resident(Model):
     load_minutes: float = Field(ge=0, description="Time to get them into a vehicle")
     people: int = Field(1, ge=1, description="People travelling together, including carers")
     source: ResidentSource = "registry"
-    # PROPOSED: when the system first learned about this person (requests arrive mid-fire).
+    # When the system first learned about this person (requests arrive mid-fire).
     known_at: AwareDatetime | None = None
-    # PROPOSED: free-text details from a help request, e.g. "2nd floor, no elevator".
+    # Free-text details from a help request, e.g. "2nd floor, no elevator".
     notes: str | None = None
-    # PROPOSED: the care facility this resident lives in, if any.
+    # The care facility this resident lives in, if any.
     facility_id: str | None = None
+    # The address a help request gave (estimated residents have none: real addresses are
+    # never used).
+    address: str | None = None
 
     def visible_from(self) -> datetime | None:
         return self.known_at
@@ -88,14 +98,14 @@ class Vehicle(Model):
     type: VehicleType
     seats: int = Field(ge=0)
     wheelchair_spaces: int = Field(0, ge=0)
-    # PROPOSED: bedbound residents travel on a stretcher, which is its own space.
+    # Bedbound residents travel on a stretcher, which is its own space.
     stretcher_spaces: int = Field(0, ge=0)
     lat: float
     lon: float
     status: VehicleStatus = "idle"
-    # PROPOSED: the depot this vehicle starts from.
+    # The depot this vehicle starts from.
     depot: str | None = None
-    # PROPOSED: minutes after t until the vehicle is free (it finishes its current run first,
+    # Minutes after t until the vehicle is free (it finishes its current run first,
     # and no new plan takes effect before it is approved). The router starts its clock here.
     available_in_min: float = Field(0.0, ge=0)
 
@@ -115,7 +125,7 @@ class FireOutlook(Model):
             "after t. None = not expected within the forecast horizon."
         )
     )
-    # PROPOSED: a detection was seen in this cell at or before t.
+    # Fire evidence (a detection or report) covers this cell at or before t.
     burning: bool = False
 
     @model_validator(mode="after")
@@ -156,12 +166,12 @@ class Plan(Model):
         description="Subset of unreachable: too late, or only reachable through danger. These "
         "go to fire command (from docs/ARCHITECTURE.md).",
     )
-    # PROPOSED: which engine produced this plan (stub, OR-Tools, a baseline...).
+    # Which engine produced this plan (stub, OR-Tools, a baseline...).
     strategy: str = "closest_first_stub"
 
 
 class PlanChange(Model):
-    """PROPOSED: one edit a human made to a plan."""
+    """One edit a human made to a plan."""
 
     kind: Literal["reassign", "remove_stop", "add_stop", "hold_vehicle"]
     resident: str | None = None
@@ -177,7 +187,7 @@ class Decision(Model):
     by: str = "emergency_manager"
     t: AwareDatetime
     changes: list[PlanChange] = []
-    # PROPOSED: why the human changed or rejected it (goes in the decision log).
+    # Why the human changed or rejected it (goes in the decision log).
     reason: str | None = None
 
     def visible_from(self) -> datetime | None:
@@ -185,31 +195,48 @@ class Decision(Model):
 
 
 # --------------------------------------------------------------------------------------
-# PROPOSED: input records and glue types the engines need
+# Input records and glue types the engines need
 # --------------------------------------------------------------------------------------
 
 
 class FireDetection(Model):
-    """One satellite fire detection (NASA FIRMS)."""
+    """One satellite fire detection (NASA FIRMS VIIRS, NOAA GOES)."""
 
     id: str
     lat: float
     lon: float
     h3: str
-    observed_at: AwareDatetime = Field(description="Satellite overpass time")
+    observed_at: AwareDatetime = Field(description="When the satellite looked (overpass or scan)")
     available_at: AwareDatetime | None = Field(
         None,
         description=(
-            "When the detection was published. FIRMS near-real-time data arrives with a delay, "
-            "so a detection observed at 22:00 may not be usable until later."
+            "When the detection was published, ONLY if the source records it. Leave empty and "
+            "the assumed publish delay for its satellite (backend/assumptions.py) is applied."
         ),
     )
-    source: str = Field("VIIRS_SNPP", description="Satellite / instrument")
+    source: str = Field(
+        "VIIRS_SNPP",
+        description="Satellite and instrument: VIIRS_SNPP, VIIRS_NOAA20, VIIRS_NOAA21, GOES18...",
+    )
+    pixel_m: float = Field(
+        375.0, gt=0,
+        description="Pixel size, metres: about 375 for VIIRS, about 2000 for GOES. The fire is "
+        "somewhere inside it.",
+    )
     frp_mw: float | None = Field(None, description="Fire radiative power, megawatts")
-    confidence: str | None = None
+    confidence: Literal["low", "nominal", "high"] | None = Field(
+        None, description="VIIRS l/n/h map to low/nominal/high"
+    )
 
     def visible_from(self) -> datetime | None:
-        return self.available_at or self.observed_at
+        if self.available_at is not None:
+            return self.available_at
+        return self.observed_at + timedelta(minutes=publish_delay_min(self.source))
+
+
+def publish_delay_min(source: str) -> float:
+    """Assumed minutes from observation to publication for a detection source."""
+    return GOES_LATENCY_MIN if source.upper().startswith("GOES") else FIRMS_LATENCY_MIN
 
 
 class FireReport(Model):
@@ -247,20 +274,34 @@ class Facility(Model):
 
 
 class WindForecast(Model):
-    """One wind forecast value (NOAA HRRR), as it was issued."""
+    """One wind forecast value (NOAA HRRR), as it was issued. Files may hold many grid points
+    per forecast; consumers pick by location."""
 
-    issued_at: AwareDatetime = Field(description="When this forecast became available")
+    run_at: AwareDatetime | None = Field(None, description="The model run (cycle) time")
+    issued_at: AwareDatetime | None = Field(
+        None,
+        description="When this forecast became available, ONLY if the source records it. Leave "
+        "empty and run_at + the assumed publish delay (backend/assumptions.py) is used.",
+    )
     valid_at: AwareDatetime = Field(description="The time the forecast is for")
     lat: float
     lon: float
     speed_ms: float = Field(ge=0, description="10 m wind speed, metres per second")
     dir_from_deg: float = Field(
-        ge=0, lt=360, description="Direction the wind blows FROM, degrees clockwise from north"
+        ge=0, lt=360, description="Direction the wind blows FROM, degrees clockwise from true north"
     )
     gust_ms: float | None = None
 
+    @model_validator(mode="after")
+    def _has_time(self) -> WindForecast:
+        if self.issued_at is None and self.run_at is None:
+            raise ValueError("give run_at (the model run time) or issued_at")
+        return self
+
     def visible_from(self) -> datetime | None:
-        return self.issued_at
+        if self.issued_at is not None:
+            return self.issued_at
+        return self.run_at + timedelta(minutes=HRRR_PUBLISH_LAG_MIN)
 
 
 class EvacOrder(Model):
@@ -280,13 +321,19 @@ class EvacOrder(Model):
 
 
 class Shelter(Model):
-    """A drop-off point."""
+    """A drop-off point. Real shelters opened during the night, so each has an opening time."""
 
     id: str
     name: str
     lat: float
     lon: float
     capacity: int | None = None
+    opened_at: AwareDatetime | None = Field(
+        None, description="When it opened for evacuees. None = open before the fire")
+    source: str | None = Field(None, description="Citation for the location and opening time")
+
+    def visible_from(self) -> datetime | None:
+        return self.opened_at
 
 
 class HelpRequest(Model):
@@ -345,7 +392,7 @@ class WorldState(Model):
     risks: list[ResidentRisk]
     plan: Plan
     decisions: list[Decision]
-    # PROPOSED: replay state, so the dashboard can show vehicles actually moving.
+    # Replay state, so the dashboard can show vehicles actually moving.
     picked_up: dict[str, AwareDatetime] = Field(
         default_factory=dict, description="Resident id -> when a vehicle left with them"
     )

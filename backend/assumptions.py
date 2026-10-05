@@ -68,6 +68,14 @@ CALL_DELAY_MAX_MIN = 60.0  # a call comes uniformly 0..this long after the trigg
 HANDLING_DELAY_MIN = 15.0  # time from a call to the planner seeing it (>= one 10-min replay step)
 TRIGGER_KM = 2.0  # a published fire report or detection this close triggers a call
 
+# --- Data publish delays (no hindsight) ------------------------------------------------------
+# Data files hold only facts (when a satellite looked, when a model ran). These delays decide
+# when each record became usable, applied when it is read (FireDetection / WindForecast).
+
+FIRMS_LATENCY_MIN = 30.0  # VIIRS overpass -> detection published on FIRMS
+GOES_LATENCY_MIN = 15.0  # GOES scan -> fire detection published
+HRRR_PUBLISH_LAG_MIN = 60.0  # HRRR model run time -> forecast available
+
 # --- Response (evaluation only) -------------------------------------------------------------
 
 FLEET_BASELINE = {"wheelchair_van": 4, "ambulance": 4, "bus": 2}
@@ -103,4 +111,9 @@ REGISTER: list[Assumption] = [
     Assumption("Road blockage", ROAD_BLOCKAGE, "share of segments", "PLACEHOLDER",
                "0, 0.05, 0.10", "Needs the road network."),
     Assumption("Unload time", UNLOAD_MIN, "min", "PLACEHOLDER", "", ""),
+    Assumption("FIRMS publish delay", FIRMS_LATENCY_MIN, "min", "PLACEHOLDER", "15, 30, 180",
+               "Decides whether satellite data arrives before the 03:25 orders (Daniel)."),
+    Assumption("GOES publish delay", GOES_LATENCY_MIN, "min", "PLACEHOLDER", "5, 15, 30", ""),
+    Assumption("HRRR publish delay", HRRR_PUBLISH_LAG_MIN, "min", "PLACEHOLDER", "45, 60, 90",
+               "Typical operational latency 45-60 min; verify."),
 ]

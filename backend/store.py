@@ -138,7 +138,7 @@ class DataStore:
             t=t,
             residents=as_of(self.residents, t),
             vehicles=list(self.vehicles),
-            shelters=list(self.shelters),
+            shelters=as_of(self.shelters, t),  # real shelters opened during the night
             detections=as_of(self.detections, t),
             reports=as_of(self.reports, t),
             facilities=list(self.facilities),

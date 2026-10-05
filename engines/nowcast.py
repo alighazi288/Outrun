@@ -9,7 +9,7 @@ Reports matter: on the Eaton night the VIIRS satellite's first detection came at
 hours after the first reports of fire west of Lake Avenue.
 
 How the stub works:
-1. Cells within DETECTION_RADIUS_M of a detection, or within a report's stated location
+1. Cells within a detection's pixel size (pixel_m), or within a report's stated location
    precision of a report, are burning (arrival = 0).
 2. The active fire front is the evidence from the last ACTIVE_WINDOW.
 3. Fire spreads fastest downwind and slowest upwind (an ellipse). The spread rate in any
@@ -34,7 +34,7 @@ from backend.schemas import FireDetection, FireOutlook, FireReport, WindForecast
 
 BACKING_RATE_M_PER_MIN = 3.0  # spread against the wind
 HEAD_RATE_M_PER_MIN_PER_MS = 0.7  # extra head-fire speed per m/s of wind
-DETECTION_RADIUS_M = 375.0  # VIIRS pixel size
+DETECTION_RADIUS_M = 375.0  # VIIRS pixel size: the smallest radius any fire evidence gets
 ACTIVE_WINDOW = timedelta(hours=2)
 SIGMA = 0.4  # log-normal spread of the rate (uncertainty)
 MIN_P_TO_REPORT = 0.01
@@ -62,7 +62,7 @@ def nowcast(
 
     Inputs are already filtered to what existed at t (DataStore.at(t)).
     """
-    evidence = [_Evidence(d.lat, d.lon, d.observed_at, DETECTION_RADIUS_M) for d in detections]
+    evidence = [_Evidence(d.lat, d.lon, d.observed_at, d.pixel_m) for d in detections]
     evidence += [
         _Evidence(r.lat, r.lon, r.reported_at, max(r.location_precision_m, DETECTION_RADIUS_M))
         for r in reports
@@ -99,8 +99,8 @@ def wind_at(wind: list[WindForecast], t: datetime) -> tuple[float, float]:
     issued at or before t, for the valid time closest to t."""
     if not wind:
         return 0.0, 0.0
-    latest_issue = max(w.issued_at for w in wind)
-    run = [w for w in wind if w.issued_at == latest_issue]
+    latest_issue = max(w.visible_from() for w in wind)
+    run = [w for w in wind if w.visible_from() == latest_issue]
     w = min(run, key=lambda w: abs((w.valid_at - t).total_seconds()))
     return w.speed_ms, (w.dir_from_deg + 180) % 360
 

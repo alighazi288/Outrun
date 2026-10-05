@@ -302,7 +302,7 @@ def create_app(store: DataStore | None = None, log_path: Path | None = None,
             needs=req.needs, vehicle_types=vehicle_types, load_minutes=load_minutes,
             people=req.people, source="request",
             known_at=req.reported_at + timedelta(minutes=HANDLING_DELAY_MIN),
-            notes=req.notes,
+            notes=req.notes, address=req.address,
         )
         store.add_resident(resident)
         sim.invalidate()

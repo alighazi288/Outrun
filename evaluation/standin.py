@@ -33,7 +33,7 @@ from backend.store import DataStore
 from engines.routing import plan_routes, plan_routes_dispatcher
 from engines.travel import haversine_m
 
-DETECTION_RADIUS_M = 375.0  # a VIIRS pixel; EVAL_SPEC §3
+DETECTION_RADIUS_M = 375.0  # a VIIRS pixel; EVAL_SPEC §3 (coarser GOES pixels aren't truth)
 
 PLANNERS = {"ours": plan_routes, "dispatcher rule": plan_routes_dispatcher}
 
@@ -50,7 +50,8 @@ def fire_arrival(store: DataStore, hexes: set[str]) -> dict[str, datetime]:
     for cell in hexes:
         centre = h3.cell_to_latlng(cell)
         for d in store.detections:
-            if haversine_m(centre, (d.lat, d.lon)) <= DETECTION_RADIUS_M:
+            if d.pixel_m <= DETECTION_RADIUS_M and \
+                    haversine_m(centre, (d.lat, d.lon)) <= DETECTION_RADIUS_M:
                 seen(cell, d.observed_at)
     for r in store.reports:
         if r.h3 in hexes:

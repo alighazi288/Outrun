@@ -1,0 +1,23 @@
+{
+  "name": "eaton",
+  "synthetic": false,
+  "description": "Eaton Fire: real reports, satellites, wind, roads, facilities, orders; residents estimated from Census",
+  "bbox": {
+    "south": 34.1585,
+    "west": -118.1826,
+    "north": 34.2264,
+    "east": -118.0841
+  },
+  "h3_res": 9,
+  "replay": {
+    "start": "2025-01-07T18:00:00-08:00",
+    "end": "2025-01-08T06:00:00-08:00",
+    "step_minutes": 10
+  },
+  "study_area": {
+    "source": "US Census Bureau TIGERweb, Census 2020: Altadena CDP (GEOID 0601290)",
+    "margin_km": 1.0,
+    "population_2020": 42846,
+    "outline": "study_area.geojson"
+  }
+}

@@ -859,7 +859,7 @@
           "kind"
         ],
         "title": "PlanChange",
-        "description": "PROPOSED: one edit a human made to a plan."
+        "description": "One edit a human made to a plan."
       },
       "Resident": {
         "properties": {
@@ -944,6 +944,11 @@
           "facility_id": {
             "type": "string",
             "title": "Facility Id",
+            "nullable": true
+          },
+          "address": {
+            "type": "string",
+            "title": "Address",
             "nullable": true
           }
         },

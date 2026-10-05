@@ -828,7 +828,7 @@
             "type": "string",
             "format": "date-time",
             "title": "Observed At",
-            "description": "Satellite overpass time"
+            "description": "When the satellite looked (overpass or scan)"
           },
           "available_at": {
             "anyOf": [
@@ -841,13 +841,20 @@
               }
             ],
             "title": "Available At",
-            "description": "When the detection was published. FIRMS near-real-time data arrives with a delay, so a detection observed at 22:00 may not be usable until later."
+            "description": "When the detection was published, ONLY if the source records it. Leave empty and the assumed publish delay for its satellite (backend/assumptions.py) is applied."
           },
           "source": {
             "type": "string",
             "title": "Source",
-            "description": "Satellite / instrument",
+            "description": "Satellite and instrument: VIIRS_SNPP, VIIRS_NOAA20, VIIRS_NOAA21, GOES18...",
             "default": "VIIRS_SNPP"
+          },
+          "pixel_m": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Pixel M",
+            "description": "Pixel size, metres: about 375 for VIIRS, about 2000 for GOES. The fire is somewhere inside it.",
+            "default": 375.0
           },
           "frp_mw": {
             "anyOf": [
@@ -864,13 +871,19 @@
           "confidence": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "enum": [
+                  "low",
+                  "nominal",
+                  "high"
+                ]
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Confidence"
+            "title": "Confidence",
+            "description": "VIIRS l/n/h map to low/nominal/high"
           }
         },
         "additionalProperties": false,
@@ -883,7 +896,7 @@
           "observed_at"
         ],
         "title": "FireDetection",
-        "description": "One satellite fire detection (NASA FIRMS)."
+        "description": "One satellite fire detection (NASA FIRMS VIIRS, NOAA GOES)."
       },
       "FireOutlook": {
         "properties": {
@@ -1368,7 +1381,7 @@
           "kind"
         ],
         "title": "PlanChange",
-        "description": "PROPOSED: one edit a human made to a plan."
+        "description": "One edit a human made to a plan."
       },
       "Resident": {
         "properties": {
@@ -1474,6 +1487,17 @@
               }
             ],
             "title": "Facility Id"
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
           }
         },
         "additionalProperties": false,
@@ -1628,6 +1652,31 @@
               }
             ],
             "title": "Capacity"
+          },
+          "opened_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Opened At",
+            "description": "When it opened for evacuees. None = open before the fire"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source",
+            "description": "Citation for the location and opening time"
           }
         },
         "additionalProperties": false,
@@ -1639,7 +1688,7 @@
           "lon"
         ],
         "title": "Shelter",
-        "description": "A drop-off point."
+        "description": "A drop-off point. Real shelters opened during the night, so each has an opening time."
       },
       "ValidationError": {
         "properties": {

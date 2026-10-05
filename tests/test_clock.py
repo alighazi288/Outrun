@@ -13,8 +13,10 @@ from .conftest import pt
 
 
 def det(observed: datetime, available: datetime | None = None) -> FireDetection:
+    """Published at `available`, or the moment it was observed (publish delays have their own
+    tests in test_contract.py)."""
     return FireDetection(id="d", lat=34.19, lon=-118.1, h3="x", observed_at=observed,
-                         available_at=available)
+                         available_at=available or observed)
 
 
 def test_as_of_boundary():
