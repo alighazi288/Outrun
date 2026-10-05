@@ -180,7 +180,9 @@ def create_app(store: DataStore | None = None, log_path: Path | None = None,
 
     @app.get("/health", operation_id="health")
     def health() -> dict:
-        return {"status": "ok", "dataset": store.name, "now": clock.now.isoformat()}
+        return {"status": "ok", "dataset": store.name, "now": clock.now.isoformat(),
+                "synthetic": store.synthetic, "fake_inputs": store.fake_inputs,
+                "missing_inputs": store.missing_inputs}
 
     @app.get("/clock", operation_id="get_clock", summary="Current replay time")
     def get_clock() -> ClockInfo:

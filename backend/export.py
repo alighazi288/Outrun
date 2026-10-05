@@ -42,9 +42,16 @@ def cells_geojson(cells: list[str]) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", type=Path, default=REPO_ROOT / "replay")
+    parser.add_argument("--public", action="store_true",
+                        help="for the judged demo: refuse unless every input is real")
     args = parser.parse_args()
 
     store = DataStore.from_env()
+    if args.public and not store.complete:
+        raise SystemExit(
+            f"Refusing a public export of '{store.name}': synthetic={store.synthetic}, "
+            f"borrowed from fake data: {store.fake_inputs}, not built: {store.missing_inputs}"
+        )
     sim = Simulation(store)
     clock = store.make_clock()
     steps_dir = args.out / "steps"
@@ -61,7 +68,9 @@ def main() -> None:
     (args.out / "cells.geojson").write_text(json.dumps(cells_geojson(store.cells)))
     manifest = {
         "dataset": store.name,
-        "synthetic_residents": True,
+        "synthetic": store.synthetic,  # residents are always estimated; this is about inputs
+        "fake_inputs": store.fake_inputs,
+        "missing_inputs": store.missing_inputs,
         "start": clock.start.isoformat(),
         "end": clock.end.isoformat(),
         "step_minutes": int(clock.step.total_seconds() // 60),
@@ -71,6 +80,9 @@ def main() -> None:
     (args.out / "manifest.json").write_text(json.dumps(manifest, indent=2))
     print(f"Wrote {len(steps)} steps and {len(store.cells)} map cells for dataset "
           f"'{store.name}' to {args.out}")
+    if store.fake_inputs or store.missing_inputs:
+        print(f"  NOT ALL REAL: borrowed from fake data {store.fake_inputs}, "
+              f"not built yet {store.missing_inputs}")
 
 
 if __name__ == "__main__":

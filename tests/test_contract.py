@@ -53,3 +53,16 @@ def test_a_shelter_is_unusable_before_it_opened(store):
                                   lon=-118.14, opened_at=pt("22:00"), source="test"))
     assert "shelter_late" not in {s.id for s in store.at(pt("21:50")).shelters}
     assert "shelter_late" in {s.id for s in store.at(pt("22:00")).shelters}
+
+
+def test_a_real_dataset_borrows_people_and_fleet_but_never_a_fake_fire(tmp_path):
+    from backend.store import DATASETS, DataStore
+
+    folder = tmp_path / "real"
+    folder.mkdir()
+    (folder / "meta.json").write_text((DATASETS["eaton"] / "meta.json").read_text())
+    store = DataStore(folder)
+    assert set(store.fake_inputs) == {"residents.jsonl", "facilities.jsonl", "vehicles.jsonl",
+                                      "shelters.jsonl"}
+    assert store.detections == [] and store.reports == [] and store.wind == []
+    assert not store.complete, "the judged export refuses until every input is real"

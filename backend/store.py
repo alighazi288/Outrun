@@ -49,6 +49,9 @@ DATASETS = {
     "eaton": DATA_DIR / "processed" / "eaton",
 }
 
+# Files a real dataset may borrow from the fake set while it's being built (people and fleet).
+FILL_FROM_FAKE = ("residents.jsonl", "facilities.jsonl", "vehicles.jsonl", "shelters.jsonl")
+
 M = TypeVar("M", bound=BaseModel)
 
 
@@ -95,20 +98,43 @@ class DataStore:
         self.folder = folder
         self.meta = json.loads((folder / "meta.json").read_text())
         self.name: str = self.meta["name"]
-        self.population = read_jsonl(folder / "residents.jsonl", Resident)
-        self.vehicles = read_jsonl(folder / "vehicles.jsonl", Vehicle)
-        self.shelters = read_jsonl(folder / "shelters.jsonl", Shelter)
-        self.detections = read_jsonl(folder / "detections.jsonl", FireDetection)
-        self.orders = read_jsonl(folder / "evac_orders.jsonl", EvacOrder)
-        self.reports = read_jsonl(folder / "fire_reports.jsonl", FireReport, optional=True)
-        self.facilities = read_jsonl(folder / "facilities.jsonl", Facility, optional=True)
+        self.synthetic: bool = self.meta.get("synthetic", True)
+        # While the real dataset is being built (data/BUILD.md), missing files are filled in:
+        self.fake_inputs: list[str] = []  # people/fleet files borrowed from the fake set
+        self.missing_inputs: list[str] = []  # fire files not built yet, left empty
+        self.population = read_jsonl(self._path("residents.jsonl"), Resident)
+        self.vehicles = read_jsonl(self._path("vehicles.jsonl"), Vehicle)
+        self.shelters = read_jsonl(self._path("shelters.jsonl"), Shelter)
+        self.detections = read_jsonl(self._path("detections.jsonl"), FireDetection, optional=True)
+        self.orders = read_jsonl(self._path("evac_orders.jsonl"), EvacOrder, optional=True)
+        self.reports = read_jsonl(self._path("fire_reports.jsonl"), FireReport, optional=True)
+        self.facilities = read_jsonl(self._path("facilities.jsonl"), Facility, optional=True)
         known = assign_knowledge(
             self.population, self.orders, self.reports, self.detections, seed, knowledge
         )
         self.residents = known.residents
         self.never_known = known.never_known
-        self.wind = read_jsonl(folder / "wind.jsonl", WindForecast)
+        self.wind = read_jsonl(self._path("wind.jsonl"), WindForecast, optional=True)
         self.cells = grid_cells(self.meta["bbox"])
+
+    def _path(self, name: str) -> Path:
+        """Where to read `name` from. A fake dataset must be complete. A real one may still be
+        missing files: people and fleet come from the fake set (listed in fake_inputs); fire
+        files stay empty (listed in missing_inputs), because a fake fire is never mixed with
+        the real one."""
+        path = self.folder / name
+        if path.exists() or self.synthetic:
+            return path
+        if name in FILL_FROM_FAKE:
+            self.fake_inputs.append(name)
+            return DATASETS["fixtures"] / name
+        self.missing_inputs.append(name)
+        return path
+
+    @property
+    def complete(self) -> bool:
+        """Real, with every input built: what judges may see (PRD: no fake data after Oct 11)."""
+        return not self.synthetic and not self.fake_inputs and not self.missing_inputs
 
     @classmethod
     def from_env(cls, seed: int = 0) -> DataStore:
