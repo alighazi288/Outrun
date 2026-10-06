@@ -4,6 +4,11 @@ For every HRRR sfc cycle from 2025-01-07 18:00 UTC to 2025-01-10 08:00 UTC (hour
 and fxx 0–3, loads 10 m U/V wind components and surface gust, crops to the study box,
 and writes one WindForecast record per grid cell per forecast.
 
+issued_at is set to the HRRR cycle time (in Pacific). The publish lag (the delay
+between cycle time and when the forecast is available on AWS) is applied at load time
+by backend/store.py.
+
+    uv sync --extra wx
     uv run python scripts/build_wind.py          # all cycles
     uv run python scripts/build_wind.py --quick  # first 3 cycles only (for testing)
 """
@@ -19,19 +24,22 @@ import numpy as np
 
 from backend.clock import PACIFIC
 from backend.schemas import WindForecast
-from backend.store import DATASETS, write_jsonl
-
-# PLACEHOLDER: minutes after the HRRR cycle time before the forecast is published on AWS.
-# Typical operational latency is ~45-60 min; verify against evaluation results.
-HRRR_PUBLISH_LAG_MIN = 60
+from backend.store import DATASETS, EATON_DOWNLOAD_BOX, write_jsonl
 
 # Study bounding box (Western Eaton fire area)
-W, S, E, N = -118.23, 34.12, -118.03, 34.26
+W = EATON_DOWNLOAD_BOX["west"]
+S = EATON_DOWNLOAD_BOX["south"]
+E = EATON_DOWNLOAD_BOX["east"]
+N = EATON_DOWNLOAD_BOX["north"]
 
 # Full run window: 2025-01-07 18:00 UTC to 2025-01-10 08:00 UTC, every hour
 _UTC = UTC
 RUN_START = datetime(2025, 1, 7, 18, 0, tzinfo=_UTC)
 RUN_END = datetime(2025, 1, 10, 8, 0, tzinfo=_UTC)
+
+# Replay window for gap-check (PST = UTC-8)
+REPLAY_START_PST = datetime(2025, 1, 7, 18, 0, tzinfo=PACIFIC)
+REPLAY_END_PST = datetime(2025, 1, 8, 6, 0, tzinfo=PACIFIC)
 
 HRRR_CACHE_DIR = Path("data/raw/hrrr")
 
@@ -95,6 +103,25 @@ def _load_cycle(cycle: datetime, fxx: int) -> list[WindForecast]:
     u_box = ds_uv[u_name].values[r0:r1, c0:c1]
     v_box = ds_uv[v_name].values[r0:r1, c0:c1]
 
+    # Earth-relative wind rotation.
+    # HRRR uses a Lambert conformal projection (standard parallel 38.5°N, central meridian
+    # −97.5°). When GRIB_uvRelativeToGrid == 1 the U/V components are grid-relative (rotated
+    # with the map projection) and must be rotated back to earth-relative before computing
+    # speed or direction. Formula per NCEP documentation:
+    #   rotation angle a = sin(φ₀) × (λ + λ₀)   where φ₀=38.5°, λ₀=97.5° (offset from CM)
+    uv_relative = ds_uv[u_name].attrs.get("GRIB_uvRelativeToGrid")
+    if uv_relative is None:
+        log.warning(
+            "GRIB_uvRelativeToGrid missing for cycle %s fxx=%d — rotating anyway", cycle_str, fxx
+        )
+        uv_relative = 1
+    if uv_relative == 1:
+        a = np.radians(np.sin(np.radians(38.5)) * (lon_box + 97.5))
+        u_e = np.cos(a) * u_box + np.sin(a) * v_box
+        v_e = -np.sin(a) * u_box + np.cos(a) * v_box
+    else:
+        u_e, v_e = u_box, v_box
+
     # Gust variable name varies; find it
     import xarray as xr
 
@@ -111,7 +138,7 @@ def _load_cycle(cycle: datetime, fxx: int) -> list[WindForecast]:
     inbox = (lon_box >= W) & (lon_box <= E) & (lat_box >= S) & (lat_box <= N)
 
     # Drop any point with NaN u, v, or gust
-    valid_uv = ~np.isnan(u_box) & ~np.isnan(v_box)
+    valid_uv = ~np.isnan(u_e) & ~np.isnan(v_e)
     valid_gust = ~np.isnan(gust_box) if gust_box is not None else np.ones_like(inbox, dtype=bool)
     keep = inbox & valid_uv & valid_gust
 
@@ -124,15 +151,15 @@ def _load_cycle(cycle: datetime, fxx: int) -> list[WindForecast]:
         cycle_str, fxx, n_keep,
     )
 
-    # Derived fields
-    speed_ms = np.hypot(u_box, v_box)
+    # Derived fields (earth-relative components)
+    speed_ms = np.hypot(u_e, v_e)
     # Meteorological FROM direction: the direction the wind is blowing FROM
-    dir_from_deg = (np.degrees(np.arctan2(-u_box, -v_box)) + 360) % 360
+    dir_from_deg = (np.degrees(np.arctan2(-u_e, -v_e)) + 360) % 360
 
-    # Timestamps
-    issued_at_utc = cycle + timedelta(minutes=HRRR_PUBLISH_LAG_MIN)
+    # Timestamps: issued_at is the raw cycle time (Pacific).
+    # The publish lag is applied at load time by backend/store.py.
+    issued_at = cycle.astimezone(PACIFIC)
     valid_at_utc = cycle + timedelta(hours=fxx)
-    issued_at = issued_at_utc.astimezone(PACIFIC)
     valid_at = valid_at_utc.astimezone(PACIFIC)
 
     records: list[WindForecast] = []
@@ -161,7 +188,10 @@ def main() -> None:
     parser.add_argument(
         "--quick",
         action="store_true",
-        help="Process only the first 3 cycles (fast test mode)",
+        help=(
+            "Process only the first 3 cycles (fast test mode);"
+            " writes to data/raw/hrrr/wind_quick.jsonl"
+        ),
     )
     args = parser.parse_args()
 
@@ -175,10 +205,14 @@ def main() -> None:
     HRRR_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
     all_records: list[WindForecast] = []
+    missing: list[tuple[datetime, int]] = []  # (cycle, fxx) pairs that returned no rows
+
     for cycle in cycles:
         cycle_recs: list[WindForecast] = []
         for fxx in range(4):  # 0, 1, 2, 3
             recs = _load_cycle(cycle, fxx)
+            if not recs:
+                missing.append((cycle, fxx))
             cycle_recs.extend(recs)
         all_records.extend(cycle_recs)
         log.info(
@@ -187,12 +221,54 @@ def main() -> None:
             len(cycle_recs),
         )
 
-    out_path = DATASETS["eaton"] / "wind.jsonl"
-    write_jsonl(out_path, all_records)
-    log.info("Wrote %d WindForecast records → %s", len(all_records), out_path)
+    # Gap check: report every (cycle, fxx) that returned no rows
+    if missing:
+        log.warning("%d missing (cycle, fxx) pairs:", len(missing))
+        critical: list[tuple[datetime, int]] = []
+        for cyc, fxx in missing:
+            valid_at_pst = (cyc + timedelta(hours=fxx)).astimezone(PACIFIC)
+            in_window = REPLAY_START_PST <= valid_at_pst <= REPLAY_END_PST
+            marker = " *** IN REPLAY WINDOW ***" if in_window else ""
+            log.warning(
+                "  missing: cycle %s fxx=%d  (valid_at %s)%s",
+                cyc.strftime("%Y-%m-%dT%H:%MZ"),
+                fxx,
+                valid_at_pst.isoformat(),
+                marker,
+            )
+            if in_window:
+                critical.append((cyc, fxx))
+        if critical:
+            raise SystemExit(
+                f"{len(critical)} missing (cycle, fxx) pairs have valid_at inside the replay "
+                f"window {REPLAY_START_PST.isoformat()} – {REPLAY_END_PST.isoformat()}: "
+                + ", ".join(
+                    f"cycle={c.strftime('%Y-%m-%dT%H:%MZ')} fxx={f}" for c, f in critical
+                )
+            )
 
+    # Empty guard
     if not all_records:
-        log.warning("No records written — all cycles were skipped or returned empty grids.")
+        raise SystemExit(
+            "No WindForecast records produced — all cycles were skipped or returned empty grids. "
+            "Check HRRR cache and network access."
+        )
+
+    if args.quick:
+        out_path = HRRR_CACHE_DIR / "wind_quick.jsonl"
+        write_jsonl(out_path, all_records)
+        speeds = [r.speed_ms for r in all_records]
+        dirs = [r.dir_from_deg for r in all_records]
+        print(
+            f"--quick summary: {len(all_records)} records → {out_path}\n"
+            f"  speed_ms  mean={np.mean(speeds):.2f}"
+            f"  min={np.min(speeds):.2f}  max={np.max(speeds):.2f}\n"
+            f"  dir_from_deg  mean={np.mean(dirs):.1f}"
+        )
+    else:
+        out_path = DATASETS["eaton"] / "wind.jsonl"
+        write_jsonl(out_path, all_records)
+        log.info("Wrote %d WindForecast records → %s", len(all_records), out_path)
 
 
 if __name__ == "__main__":

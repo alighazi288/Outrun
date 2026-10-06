@@ -10,18 +10,21 @@ Run locally after `uv run python scripts/build_detections.py` and
 
 from __future__ import annotations
 
-from datetime import timedelta
+from collections import Counter
 
 import pytest
 
 from backend.schemas import FireDetection, WindForecast
-from backend.store import DATASETS, read_jsonl
+from backend.store import DATASETS, EATON_DOWNLOAD_BOX, read_jsonl
+from engines.travel import haversine_m
 
 # ---------------------------------------------------------------------------
-# Study bounding box (must match W, S, E, N in build_detections.py /
-# build_wind.py)
+# Study bounding box – single source of truth
 # ---------------------------------------------------------------------------
-_W, _S, _E, _N = -118.23, 34.12, -118.03, 34.26
+_W = EATON_DOWNLOAD_BOX["west"]
+_S = EATON_DOWNLOAD_BOX["south"]
+_E = EATON_DOWNLOAD_BOX["east"]
+_N = EATON_DOWNLOAD_BOX["north"]
 
 _EATON_DIR = DATASETS["eaton"]
 _DETECTIONS_PATH = _EATON_DIR / "detections.jsonl"
@@ -38,6 +41,17 @@ skip_if_no_wind = pytest.mark.skipif(
     not _WIND_PATH.exists(),
     reason=f"Eaton wind data not found: {_WIND_PATH}",
 )
+
+# Known static heat source that must be excluded from detections
+_STATIC_LAT = 34.153
+_STATIC_LON = -118.193
+_STATIC_RADIUS_M = 1_000.0
+
+# Valid satellite source names
+_VALID_SOURCES = {"VIIRS_SNPP", "VIIRS_NOAA20", "VIIRS_NOAA21", "GOES18_FDCC"}
+
+# Valid fxx offsets for HRRR (0–3 hours)
+_VALID_FXX_HOURS = {0, 1, 2, 3}
 
 
 # ---------------------------------------------------------------------------
@@ -74,13 +88,10 @@ def test_detections_times_have_tz_offset(detections: list[FireDetection]) -> Non
 
 
 @skip_if_no_detections
-def test_detections_available_at_gte_observed_at(detections: list[FireDetection]) -> None:
-    bad = [
-        d.id
-        for d in detections
-        if d.available_at is not None and d.available_at < d.observed_at
-    ]
-    assert not bad, f"Detections where available_at < observed_at: {bad[:5]}"
+def test_detections_available_at_is_none(detections: list[FireDetection]) -> None:
+    """Raw detections must have available_at=None; latency is applied at load time."""
+    bad = [d.id for d in detections if d.available_at is not None]
+    assert not bad, f"Detections with non-None available_at: {bad[:5]}"
 
 
 @skip_if_no_detections
@@ -91,6 +102,29 @@ def test_detections_inside_study_box(detections: list[FireDetection]) -> None:
         if not (_S <= d.lat <= _N and _W <= d.lon <= _E)
     ]
     assert not bad, f"Detections outside study box: {bad[:5]}"
+
+
+@skip_if_no_detections
+def test_detections_valid_sources(detections: list[FireDetection]) -> None:
+    """Every detection source must be one of the four known satellite sources."""
+    bad = [d.id for d in detections if d.source not in _VALID_SOURCES]
+    assert not bad, (
+        f"Detections with unknown source: {bad[:5]} "
+        f"(valid: {sorted(_VALID_SOURCES)})"
+    )
+
+
+@skip_if_no_detections
+def test_detections_no_static_heat_source(detections: list[FireDetection]) -> None:
+    """No detection must fall within 1 km of the known static heat source."""
+    bad = [
+        d.id
+        for d in detections
+        if haversine_m((d.lat, d.lon), (_STATIC_LAT, _STATIC_LON)) <= _STATIC_RADIUS_M
+    ]
+    assert not bad, (
+        f"Detections within 1 km of static source ({_STATIC_LAT}, {_STATIC_LON}): {bad[:5]}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -116,23 +150,44 @@ def test_wind_times_have_tz_offset(wind: list[WindForecast]) -> None:
 
 
 @skip_if_no_wind
-def test_wind_issued_at_before_valid_at_plus_4h(wind: list[WindForecast]) -> None:
-    """issued_at must be before valid_at + 4 hours.
+def test_wind_fxx_is_0_to_3_hours(wind: list[WindForecast]) -> None:
+    """valid_at - issued_at must be exactly 0, 1, 2, or 3 hours (HRRR fxx 0–3)."""
+    bad = []
+    for i, w in enumerate(wind):
+        delta = w.valid_at - w.issued_at
+        hours = delta.total_seconds() / 3600
+        if hours not in _VALID_FXX_HOURS:
+            bad.append((i, hours))
+    assert not bad, (
+        f"Wind rows where valid_at - issued_at is not in {{0,1,2,3}} h: "
+        f"{bad[:5]}"
+    )
 
-    HRRR fxx=0 forecasts are for the cycle time itself; with a 60-minute
-    publish lag the issued time is 1 hour *after* valid_at, which is fine.
-    The 4-hour window is generous enough to cover all fxx 0–3 cases while
-    still catching obviously wrong timestamps.
-    """
-    four_hours = timedelta(hours=4)
+
+@skip_if_no_wind
+def test_wind_issued_at_on_the_hour(wind: list[WindForecast]) -> None:
+    """issued_at must be on the hour (seconds == minutes == 0) – HRRR cycle times."""
     bad = [
         i
         for i, w in enumerate(wind)
-        if w.issued_at >= w.valid_at + four_hours
+        if w.issued_at.minute != 0 or w.issued_at.second != 0 or w.issued_at.microsecond != 0
     ]
     assert not bad, (
-        f"Wind rows where issued_at >= valid_at + 4h at indices: {bad[:5]}\n"
-        f"  example: issued={wind[bad[0]].issued_at}, valid={wind[bad[0]].valid_at}"
+        f"Wind rows where issued_at is not on the hour at indices: {bad[:5]}\n"
+        f"  example: {wind[bad[0]].issued_at}"
+    )
+
+
+@skip_if_no_wind
+def test_wind_uniform_point_count_per_issued_valid_pair(wind: list[WindForecast]) -> None:
+    """Every (issued_at, valid_at) pair must have the same number of grid points."""
+    counts: Counter[tuple] = Counter(
+        (w.issued_at, w.valid_at) for w in wind
+    )
+    distinct_counts = set(counts.values())
+    assert len(distinct_counts) == 1, (
+        f"Unequal point counts per (issued_at, valid_at) pair: "
+        f"found counts {sorted(distinct_counts)}"
     )
 
 

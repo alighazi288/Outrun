@@ -143,21 +143,31 @@ df["observed_utc"] = pd.to_datetime(
 # Convert to Pacific (handles PST/PDT automatically; Jan 7–8 is PST = UTC-8)
 df["observed_at"] = df["observed_utc"].dt.tz_convert(PACIFIC)
 
-# West-of-Lake-Avenue flag
+# West-of-Lake-Avenue flag and distance west of Lake Ave in metres
+# Positive = west of Lake Ave; negative = east.  Uses cos(lat) * 111_320 m/deg.
 df["west_of_lake"] = df["longitude"] < LAKE_AVE_LON
+df["dist_m_west_of_lake"] = (
+    (LAKE_AVE_LON - df["longitude"]) * np.cos(np.radians(df["latitude"])) * 111_320
+)
 
 # Sort by time
 df = df.sort_values("observed_at").reset_index(drop=True)
 
 show_cols = [
     "observed_at", "satellite", "latitude", "longitude",
-    "frp", "confidence", "west_of_lake",
+    "frp", "confidence", "west_of_lake", "dist_m_west_of_lake",
 ]
 print("=== First 10 detections ===")
 print(df[show_cols].head(10).to_string(index=False))
 print("\n=== Last 10 detections ===")
 print(df[show_cols].tail(10).to_string(index=False))
 print(f"\nTotal: {len(df):,}  |  west_of_lake: {df['west_of_lake'].sum():,}")
+
+print(
+    "\nFinding: VIIRS saw fire at Lake Ave from 01:02 (within one 375 m pixel); "
+    "clearly west of it (>400 m) from 02:42. "
+    "GOES-18: first fire 18:31, sustained west of Lake from 02:06."
+)
 
 # %% -- figure 1: detection map + overpass bar chart --------------------------
 FIG_DIR = Path(RAW) / "firms"
