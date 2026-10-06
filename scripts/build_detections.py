@@ -70,13 +70,17 @@ _SAT_TO_SOURCE = {
 # 10/30 = high, 11-13/31-33 = nominal, 14-15/34-35 = low
 _FIRE_MASK_CODES = set(range(10, 16)) | set(range(30, 36))
 
+# VIIRS confidence letter -> schema word
+_VIIRS_CONF = {"l": "low", "n": "nominal", "h": "high"}
+
 
 def _confidence_for_mask(code: int) -> str:
+    """Return schema confidence word for a GOES fire-mask code."""
     if code in (10, 30):
-        return "h"
+        return "high"
     if code in range(11, 14) or code in range(31, 34):
-        return "n"
-    return "l"
+        return "nominal"
+    return "low"
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -137,7 +141,8 @@ def build_viirs_detection(row: pd.Series) -> FireDetection:
     acq_time = str(int(row["acq_time"])).zfill(4)
     observed_at = row["observed_at"].to_pydatetime()
     frp = float(row["frp"]) if pd.notna(row["frp"]) else None
-    confidence = str(row["confidence"]) if pd.notna(row["confidence"]) else None
+    raw_conf = str(row["confidence"]).strip().lower() if pd.notna(row["confidence"]) else None
+    confidence = _VIIRS_CONF.get(raw_conf) if raw_conf is not None else None
     return FireDetection(
         id=f"{source_tag}_{acq_date}_{acq_time}_{lat:.4f}_{lon:.4f}",
         lat=lat,
@@ -269,7 +274,8 @@ def build_goes_detections(local_files: list[str]) -> list[FireDetection]:
                 h3=h3.latlng_to_cell(lat, lon, H3_RES),
                 observed_at=scan_start,
                 available_at=None,
-                source="GOES18_FDCC",
+                source="GOES18",
+                pixel_m=2000.0,
                 frp_mw=frp,
                 confidence=_confidence_for_mask(code),
             ))

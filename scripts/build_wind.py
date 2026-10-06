@@ -4,9 +4,9 @@ For every HRRR sfc cycle from 2025-01-07 18:00 UTC to 2025-01-10 08:00 UTC (hour
 and fxx 0–3, loads 10 m U/V wind components and surface gust, crops to the study box,
 and writes one WindForecast record per grid cell per forecast.
 
-issued_at is set to the HRRR cycle time (in Pacific). The publish lag (the delay
+run_at is set to the HRRR cycle time (in Pacific). The publish lag (the delay
 between cycle time and when the forecast is available on AWS) is applied at load time
-by backend/store.py.
+by WindForecast.visible_from() (run_at + HRRR_PUBLISH_LAG_MIN).
 
     uv sync --extra wx
     uv run python scripts/build_wind.py          # all cycles
@@ -156,9 +156,9 @@ def _load_cycle(cycle: datetime, fxx: int) -> list[WindForecast]:
     # Meteorological FROM direction: the direction the wind is blowing FROM
     dir_from_deg = (np.degrees(np.arctan2(-u_e, -v_e)) + 360) % 360
 
-    # Timestamps: issued_at is the raw cycle time (Pacific).
-    # The publish lag is applied at load time by backend/store.py.
-    issued_at = cycle.astimezone(PACIFIC)
+    # Timestamps: run_at is the raw cycle time (Pacific). issued_at is intentionally
+    # left unset so that WindForecast.visible_from() applies run_at + HRRR_PUBLISH_LAG_MIN.
+    run_at = cycle.astimezone(PACIFIC)
     valid_at_utc = cycle + timedelta(hours=fxx)
     valid_at = valid_at_utc.astimezone(PACIFIC)
 
@@ -171,7 +171,7 @@ def _load_cycle(cycle: datetime, fxx: int) -> list[WindForecast]:
             gust = float(gust_box[ri, ci]) if gust_box is not None else None
             records.append(
                 WindForecast(
-                    issued_at=issued_at,
+                    run_at=run_at,
                     valid_at=valid_at,
                     lat=round(float(lat_box[ri, ci]), 6),
                     lon=round(float(lon_box[ri, ci]), 6),

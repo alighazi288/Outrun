@@ -353,8 +353,16 @@ map.on("load", async () => {
     document.getElementById("foot").textContent = String(err);
     return;
   }
-  if (!manifest.dataset.includes("fake")) document.getElementById("fake-badge").textContent =
-    "Placeholder for the real dashboard";
+  // Say exactly how real the data is: fake, partly fake (dataset still being built), or real.
+  const badge = document.getElementById("fake-badge");
+  const borrowed = (manifest.fake_inputs || []).map((f) => f.replace(".jsonl", ""));
+  const missing = (manifest.missing_inputs || []).map((f) => f.replace(".jsonl", ""));
+  if (manifest.synthetic === false && (borrowed.length || missing.length)) {
+    badge.textContent = "PARTLY FAKE · fake: " + (borrowed.join(", ") || "none") +
+      " · not built yet: " + (missing.join(", ") || "none");
+  } else if (manifest.synthetic === false) {
+    badge.textContent = "Real inputs · placeholder for the real dashboard";
+  }
   document.getElementById("slider").max = manifest.steps.length - 1;
   addLayers();
   await show(0);

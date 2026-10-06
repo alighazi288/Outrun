@@ -3,6 +3,10 @@
 The rules and the proposed values are in [`docs/EVAL_SPEC.md`](../docs/EVAL_SPEC.md). This folder
 holds the code that carries them out.
 
+**Now:** `standin.py` (`make eval`) is a STAND-IN: ours vs. the dispatcher rule over 5 seeds, with
+fire arrival = first evidence of fire in each hex. Its docstring lists what the real version
+adds. Replace it piece by piece; `tests/test_eval.py` pins the scoring rule.
+
 ## Pieces
 
 - **Arrival window:** per hex, the earliest and latest plausible fire arrival. It's built from DINS

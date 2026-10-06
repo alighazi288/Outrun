@@ -2,21 +2,30 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 
 from backend.api.main import create_app
+from backend.store import REPO_ROOT
 
 EXPECTED_TOOLS = {
     "get_fire_outlook", "get_residents_at_risk", "get_current_plan",
     "submit_help_request", "submit_fire_report", "record_decision", "list_decisions",
-    "get_world_state",
+    "get_world_state", "get_vehicle_runs",
+}
+
+
+ADDRESSES = {  # a pretend geocoder, so tests never call the Census service
+    "2260 N Lake Ave, Altadena, CA": (34.18476, -118.13147),
+    "200 N Spring St, Los Angeles, CA": (34.05369, -118.24277),  # outside the study area
 }
 
 
 @pytest.fixture
 def client(store):
-    return TestClient(create_app(store=store))
+    return TestClient(create_app(store=store, geocode=ADDRESSES.get))
 
 
 def test_health(client):
@@ -41,6 +50,15 @@ def test_openapi_tool_names(client):
     spec = client.get("/openapi.json").json()
     ops = {op["operationId"] for path in spec["paths"].values() for op in path.values()}
     assert EXPECTED_TOOLS <= ops
+
+
+def test_committed_openapi_is_up_to_date():
+    """backend/openapi.json must match the code (the dashboard reads it). If this fails:
+    make openapi."""
+    committed = json.loads((REPO_ROOT / "backend" / "openapi.json").read_text())
+    current = create_app().openapi()
+    committed.pop("servers"), current.pop("servers")  # depends on where it was generated
+    assert committed == current
 
 
 def test_help_request_respects_time(client):
@@ -110,3 +128,45 @@ def test_ws_and_export_payloads_round_trip(client, tmp_path, monkeypatch):
     export.main()
     first = sorted((tmp_path / "steps").iterdir())[40]
     WorldState.model_validate_json(first.read_text())
+
+
+def test_help_request_by_address_uses_looked_up_coordinates(client):
+    body = {"address": "2260 N Lake Ave, Altadena, CA", "needs": "oxygen",
+            "raw_text": "my dad's on oxygen, 2nd floor, 2260 N Lake Ave"}
+    r = client.post("/requests", json=body)
+    assert r.status_code == 201
+    assert (r.json()["lat"], r.json()["lon"]) == ADDRESSES["2260 N Lake Ave, Altadena, CA"]
+    assert r.json()["address"] == "2260 N Lake Ave, Altadena, CA"
+    # No time given: the call came in at the replay clock's current time (18:00).
+    assert r.json()["known_at"] == "2025-01-07T18:15:00-08:00"
+
+
+def test_unknown_address_tells_the_agent_what_to_ask(client):
+    r = client.post("/requests", json={"address": "Mariposa St, Altadena", "needs": "wheelchair"})
+    assert r.status_code == 422 and "house number" in r.json()["detail"]
+
+
+def test_address_outside_the_area_is_refused(client):
+    body = {"address": "200 N Spring St, Los Angeles, CA", "needs": "bedbound"}
+    r = client.post("/requests", json=body)
+    assert r.status_code == 422 and "outside" in r.json()["detail"]
+
+
+def test_request_needs_a_location(client):
+    assert client.post("/requests", json={"needs": "oxygen"}).status_code == 422
+
+
+def test_fire_report_by_address(client):
+    body = {"address": "2260 N Lake Ave, Altadena, CA", "description": "flames behind houses"}
+    r = client.post("/reports", json=body)
+    assert r.status_code == 201 and r.json()["reported_at"] == "2025-01-07T18:00:00-08:00"
+
+
+def test_vehicle_runs_show_work_already_in_progress(client):
+    runs = client.get("/vehicles", params={"t": "2025-01-07T19:00:00-08:00"}).json()
+    assert len(runs) == 5
+    busy = [r for r in runs if r["stops"]]
+    assert busy, "at 19:00 vehicles are out picking people up"
+    for r in busy:
+        assert len(r["stops"]) == len(r["eta_min"])
+        assert r["stops"][-1].startswith("shelter")

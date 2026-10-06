@@ -289,7 +289,7 @@
     "/plan": {
       "get": {
         "summary": "The proposed rescue plan at time t",
-        "description": "Routes per vehicle with ETAs, people no vehicle can reach in time (unreachable, must be escalated), and a reason per person.",
+        "description": "New assignments waiting for approval (routes per vehicle with ETAs), people no vehicle can reach in time (unreachable, must be escalated) and a reason per person. Vehicles keep the run they are already on; see get_vehicle_runs for those.",
         "operationId": "get_current_plan",
         "parameters": [
           {
@@ -336,10 +336,64 @@
         }
       }
     },
+    "/vehicles": {
+      "get": {
+        "summary": "What each vehicle is doing now",
+        "description": "Every vehicle with its status and the run it is already driving: remaining stops in order (resident ids, then a shelter) with ETAs in minutes after t. These runs are approved and in progress; get_current_plan only holds new assignments.",
+        "operationId": "get_vehicle_runs",
+        "parameters": [
+          {
+            "name": "t",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Replay time, ISO-8601 with offset, e.g. 2025-01-07T23:40:00-08:00. Omit to use the replay clock's current time.",
+              "title": "T"
+            },
+            "description": "Replay time, ISO-8601 with offset, e.g. 2025-01-07T23:40:00-08:00. Omit to use the replay clock's current time."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/VehicleRun"
+                  },
+                  "title": "Response Get Vehicle Runs"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/requests": {
       "post": {
         "summary": "Add a help request to the plan",
-        "description": "Send a structured request (location, needs, people, notes). The backend fills in the map cell, vehicle types and loading time. The person becomes visible to the planner after the call-handling delay (HANDLING_DELAY_MIN after reported_at).",
+        "description": "Send a structured request: the caller's address, needs, people, notes. The backend looks up the coordinates and fills in the map cell, vehicle types and loading time. If the address isn't found, the error says what to ask the caller. The person becomes visible to the planner after the call-handling delay.",
         "operationId": "submit_help_request",
         "requestBody": {
           "content": {
@@ -378,7 +432,7 @@
     "/reports": {
       "post": {
         "summary": "Add a report of fire at a place and time",
-        "description": "Send a structured fire sighting (where, when, what was seen). It feeds the fire forecast from reported_at onward, alongside satellite detections.",
+        "description": "Send a structured fire sighting: the nearest address, what was seen. The backend looks up the coordinates. It feeds the fire forecast from reported_at onward, alongside satellite detections.",
         "operationId": "submit_fire_report",
         "requestBody": {
           "content": {
@@ -417,6 +471,7 @@
     "/decisions": {
       "get": {
         "summary": "All recorded decisions",
+        "description": "Every approve, modify or reject decision recorded so far, in order.",
         "operationId": "list_decisions",
         "responses": {
           "200": {
@@ -437,6 +492,7 @@
       },
       "post": {
         "summary": "Record what the emergency manager did with a plan",
+        "description": "Call only after the emergency manager explicitly says approve, modify or reject, with the plan_id from get_current_plan. Never approve on your own.",
         "operationId": "record_decision",
         "requestBody": {
           "content": {
@@ -772,7 +828,7 @@
             "type": "string",
             "format": "date-time",
             "title": "Observed At",
-            "description": "Satellite overpass time"
+            "description": "When the satellite looked (overpass or scan)"
           },
           "available_at": {
             "anyOf": [
@@ -785,13 +841,20 @@
               }
             ],
             "title": "Available At",
-            "description": "When the detection was published. FIRMS near-real-time data arrives with a delay, so a detection observed at 22:00 may not be usable until later."
+            "description": "When the detection was published, ONLY if the source records it. Leave empty and the assumed publish delay for its satellite (backend/assumptions.py) is applied."
           },
           "source": {
             "type": "string",
             "title": "Source",
-            "description": "Satellite / instrument",
+            "description": "Satellite and instrument: VIIRS_SNPP, VIIRS_NOAA20, VIIRS_NOAA21, GOES18...",
             "default": "VIIRS_SNPP"
+          },
+          "pixel_m": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Pixel M",
+            "description": "Pixel size, metres: about 375 for VIIRS, about 2000 for GOES. The fire is somewhere inside it.",
+            "default": 375.0
           },
           "frp_mw": {
             "anyOf": [
@@ -808,13 +871,19 @@
           "confidence": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "enum": [
+                  "low",
+                  "nominal",
+                  "high"
+                ]
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Confidence"
+            "title": "Confidence",
+            "description": "VIIRS l/n/h map to low/nominal/high"
           }
         },
         "additionalProperties": false,
@@ -827,7 +896,7 @@
           "observed_at"
         ],
         "title": "FireDetection",
-        "description": "One satellite fire detection (NASA FIRMS)."
+        "description": "One satellite fire detection (NASA FIRMS VIIRS, NOAA GOES)."
       },
       "FireOutlook": {
         "properties": {
@@ -947,28 +1016,25 @@
       },
       "FireReportIn": {
         "properties": {
-          "reported_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Reported At"
-          },
-          "lat": {
-            "type": "number",
-            "title": "Lat"
-          },
-          "lon": {
-            "type": "number",
-            "title": "Lon"
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address",
+            "description": "Nearest street address with house number and city. The backend looks up the coordinates.",
+            "examples": [
+              "2260 N Lake Ave, Altadena, CA"
+            ]
           },
           "description": {
             "type": "string",
-            "title": "Description"
-          },
-          "location_precision_m": {
-            "type": "number",
-            "minimum": 0.0,
-            "title": "Location Precision M",
-            "default": 250.0
+            "title": "Description",
+            "description": "What was seen, in a short sentence"
           },
           "raw_text": {
             "anyOf": [
@@ -980,13 +1046,53 @@
               }
             ],
             "title": "Raw Text"
+          },
+          "reported_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reported At",
+            "description": "When it was reported. Omit to use the replay clock's current time."
+          },
+          "lat": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lat",
+            "description": "Only if known from a device, never estimated"
+          },
+          "lon": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lon",
+            "description": "Only if known from a device, never estimated"
+          },
+          "location_precision_m": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Location Precision M",
+            "default": 250.0
           }
         },
         "type": "object",
         "required": [
-          "reported_at",
-          "lat",
-          "lon",
           "description"
         ],
         "title": "FireReportIn",
@@ -1007,18 +1113,20 @@
       },
       "HelpRequest": {
         "properties": {
-          "reported_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Reported At"
-          },
-          "lat": {
-            "type": "number",
-            "title": "Lat"
-          },
-          "lon": {
-            "type": "number",
-            "title": "Lon"
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address",
+            "description": "Street address with house number and city, as the caller said it. The backend looks up the coordinates.",
+            "examples": [
+              "2260 N Lake Ave, Altadena, CA"
+            ]
           },
           "needs": {
             "type": "string",
@@ -1029,24 +1137,15 @@
               "no_car",
               "none"
             ],
-            "title": "Needs"
+            "title": "Needs",
+            "description": "wheelchair, oxygen, bedbound, no_car (can move but has no ride), or none"
           },
           "people": {
             "type": "integer",
             "minimum": 1.0,
             "title": "People",
+            "description": "How many people need the ride",
             "default": 1
-          },
-          "address": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Address"
           },
           "notes": {
             "anyOf": [
@@ -1073,18 +1172,52 @@
             ],
             "title": "Raw Text",
             "description": "Original message, kept for audit"
+          },
+          "reported_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reported At",
+            "description": "When the call came in. Omit to use the replay clock's current time."
+          },
+          "lat": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lat",
+            "description": "Only if known from a device, never estimated"
+          },
+          "lon": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lon",
+            "description": "Only if known from a device, never estimated"
           }
         },
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "reported_at",
-          "lat",
-          "lon",
           "needs"
         ],
         "title": "HelpRequest",
-        "description": "A structured help request. The Intake agent turns free text into this; the backend\nfills in every number (cell, vehicle types, load time) from NEED_PROFILES."
+        "description": "A structured help request. The Intake agent turns free text into this; the backend\nfills in every number (coordinates, cell, vehicle types, load time)."
       },
       "OutlookSummary": {
         "properties": {
@@ -1248,7 +1381,7 @@
           "kind"
         ],
         "title": "PlanChange",
-        "description": "PROPOSED: one edit a human made to a plan."
+        "description": "One edit a human made to a plan."
       },
       "Resident": {
         "properties": {
@@ -1354,6 +1487,17 @@
               }
             ],
             "title": "Facility Id"
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
           }
         },
         "additionalProperties": false,
@@ -1508,6 +1652,31 @@
               }
             ],
             "title": "Capacity"
+          },
+          "opened_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Opened At",
+            "description": "When it opened for evacuees. None = open before the fire"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source",
+            "description": "Citation for the location and opening time"
           }
         },
         "additionalProperties": false,
@@ -1519,7 +1688,7 @@
           "lon"
         ],
         "title": "Shelter",
-        "description": "A drop-off point."
+        "description": "A drop-off point. Real shelters opened during the night, so each has an opening time."
       },
       "ValidationError": {
         "properties": {
@@ -1624,6 +1793,12 @@
               }
             ],
             "title": "Depot"
+          },
+          "available_in_min": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Available In Min",
+            "default": 0.0
           }
         },
         "additionalProperties": false,
@@ -1637,6 +1812,54 @@
         ],
         "title": "Vehicle",
         "description": "One vehicle in the rescue fleet."
+      },
+      "VehicleRun": {
+        "properties": {
+          "vehicle": {
+            "type": "string",
+            "title": "Vehicle"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "free_in_min": {
+            "type": "number",
+            "title": "Free In Min",
+            "description": "Minutes until it finishes its current run"
+          },
+          "stops": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Stops",
+            "description": "Remaining stops in order: resident ids, then a shelter"
+          },
+          "eta_min": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Eta Min",
+            "description": "Minutes after t until each stop"
+          }
+        },
+        "type": "object",
+        "required": [
+          "vehicle",
+          "type",
+          "status",
+          "free_in_min",
+          "stops",
+          "eta_min"
+        ],
+        "title": "VehicleRun",
+        "description": "What one vehicle is doing at time t."
       },
       "WorldState": {
         "properties": {
@@ -1721,6 +1944,36 @@
             },
             "type": "array",
             "title": "Decisions"
+          },
+          "picked_up": {
+            "additionalProperties": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "type": "object",
+            "title": "Picked Up",
+            "description": "Resident id -> when a vehicle left with them"
+          },
+          "schedule": {
+            "items": {
+              "$ref": "#/components/schemas/Route"
+            },
+            "type": "array",
+            "title": "Schedule",
+            "description": "What each vehicle is actually doing: remaining approved stops, ETAs in minutes after t"
+          },
+          "plan_takes_effect_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plan Takes Effect At",
+            "description": "When the plan above is approved and vehicles start following it"
           }
         },
         "additionalProperties": false,

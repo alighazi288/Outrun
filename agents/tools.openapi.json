@@ -1,0 +1,1091 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Outrun API",
+    "description": "Wildfire evacuation dispatch for residents who can't evacuate alone. Every number comes from an engine; agents call these tools and explain results.",
+    "version": "0.1.0"
+  },
+  "servers": [
+    {
+      "url": "https://outrun-api.onrender.com"
+    }
+  ],
+  "paths": {
+    "/fire/outlook": {
+      "get": {
+        "summary": "Where the fire is likely to be in the next 1, 2 and 3 hours",
+        "description": "Summary counts plus the most threatened map cells. Use it to describe the fire situation. All probabilities come from the nowcast engine.",
+        "operationId": "get_fire_outlook",
+        "parameters": [
+          {
+            "name": "t",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Replay time, ISO-8601 with offset, e.g. 2025-01-07T23:40:00-08:00. Omit to use the replay clock's current time.",
+              "title": "T",
+              "nullable": true
+            },
+            "description": "Replay time, ISO-8601 with offset, e.g. 2025-01-07T23:40:00-08:00. Omit to use the replay clock's current time."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 25,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutlookSummary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/residents/at-risk": {
+      "get": {
+        "summary": "Residents who need help, most urgent first",
+        "description": "Each entry has the fire probability at their home, the pessimistic fire arrival, their rescue deadline and priority score, all computed by engines.",
+        "operationId": "get_residents_at_risk",
+        "parameters": [
+          {
+            "name": "t",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Replay time, ISO-8601 with offset, e.g. 2025-01-07T23:40:00-08:00. Omit to use the replay clock's current time.",
+              "title": "T",
+              "nullable": true
+            },
+            "description": "Replay time, ISO-8601 with offset, e.g. 2025-01-07T23:40:00-08:00. Omit to use the replay clock's current time."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AtRiskEntry"
+                  },
+                  "title": "Response Get Residents At Risk"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/plan": {
+      "get": {
+        "summary": "The proposed rescue plan at time t",
+        "description": "New assignments waiting for approval (routes per vehicle with ETAs), people no vehicle can reach in time (unreachable, must be escalated) and a reason per person. Vehicles keep the run they are already on; see get_vehicle_runs for those.",
+        "operationId": "get_current_plan",
+        "parameters": [
+          {
+            "name": "t",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Replay time, ISO-8601 with offset, e.g. 2025-01-07T23:40:00-08:00. Omit to use the replay clock's current time.",
+              "title": "T",
+              "nullable": true
+            },
+            "description": "Replay time, ISO-8601 with offset, e.g. 2025-01-07T23:40:00-08:00. Omit to use the replay clock's current time."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Plan"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/vehicles": {
+      "get": {
+        "summary": "What each vehicle is doing now",
+        "description": "Every vehicle with its status and the run it is already driving: remaining stops in order (resident ids, then a shelter) with ETAs in minutes after t. These runs are approved and in progress; get_current_plan only holds new assignments.",
+        "operationId": "get_vehicle_runs",
+        "parameters": [
+          {
+            "name": "t",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Replay time, ISO-8601 with offset, e.g. 2025-01-07T23:40:00-08:00. Omit to use the replay clock's current time.",
+              "title": "T",
+              "nullable": true
+            },
+            "description": "Replay time, ISO-8601 with offset, e.g. 2025-01-07T23:40:00-08:00. Omit to use the replay clock's current time."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/VehicleRun"
+                  },
+                  "title": "Response Get Vehicle Runs"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/requests": {
+      "post": {
+        "summary": "Add a help request to the plan",
+        "description": "Send a structured request: the caller's address, needs, people, notes. The backend looks up the coordinates and fills in the map cell, vehicle types and loading time. If the address isn't found, the error says what to ask the caller. The person becomes visible to the planner after the call-handling delay.",
+        "operationId": "submit_help_request",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HelpRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Resident"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reports": {
+      "post": {
+        "summary": "Add a report of fire at a place and time",
+        "description": "Send a structured fire sighting: the nearest address, what was seen. The backend looks up the coordinates. It feeds the fire forecast from reported_at onward, alongside satellite detections.",
+        "operationId": "submit_fire_report",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FireReportIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FireReport"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/decisions": {
+      "get": {
+        "summary": "All recorded decisions",
+        "description": "Every approve, modify or reject decision recorded so far, in order.",
+        "operationId": "list_decisions",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Decision"
+                  },
+                  "type": "array",
+                  "title": "Response List Decisions"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Record what the emergency manager did with a plan",
+        "description": "Call only after the emergency manager explicitly says approve, modify or reject, with the plan_id from get_current_plan. Never approve on your own.",
+        "operationId": "record_decision",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Decision"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Decision"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AtRiskEntry": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "needs": {
+            "type": "string",
+            "title": "Needs"
+          },
+          "people": {
+            "type": "integer",
+            "title": "People"
+          },
+          "lat": {
+            "type": "number",
+            "title": "Lat"
+          },
+          "lon": {
+            "type": "number",
+            "title": "Lon"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "p_1h": {
+            "type": "number",
+            "title": "P 1H"
+          },
+          "p_3h": {
+            "type": "number",
+            "title": "P 3H"
+          },
+          "arrival_p10_min": {
+            "type": "number",
+            "title": "Arrival P10 Min",
+            "nullable": true
+          },
+          "deadline_min": {
+            "type": "number",
+            "title": "Deadline Min",
+            "nullable": true
+          },
+          "priority": {
+            "type": "number",
+            "title": "Priority"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "needs",
+          "people",
+          "lat",
+          "lon",
+          "source",
+          "p_1h",
+          "p_3h",
+          "arrival_p10_min",
+          "deadline_min",
+          "priority"
+        ],
+        "title": "AtRiskEntry"
+      },
+      "Decision": {
+        "properties": {
+          "plan_id": {
+            "type": "string",
+            "title": "Plan Id"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "approve",
+              "modify",
+              "reject"
+            ],
+            "title": "Action"
+          },
+          "by": {
+            "type": "string",
+            "title": "By",
+            "default": "emergency_manager"
+          },
+          "t": {
+            "type": "string",
+            "format": "date-time",
+            "title": "T"
+          },
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/PlanChange"
+            },
+            "type": "array",
+            "title": "Changes",
+            "default": []
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "plan_id",
+          "action",
+          "t"
+        ],
+        "title": "Decision",
+        "description": "What the emergency manager did with a plan."
+      },
+      "FireOutlook": {
+        "properties": {
+          "t": {
+            "type": "string",
+            "format": "date-time",
+            "title": "T"
+          },
+          "h3": {
+            "type": "string",
+            "title": "H3"
+          },
+          "p_1h": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "P 1H",
+            "description": "P(fire reaches this cell within 1 hour)"
+          },
+          "p_2h": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "P 2H"
+          },
+          "p_3h": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "P 3H"
+          },
+          "arrival_p10_min": {
+            "type": "number",
+            "title": "Arrival P10 Min",
+            "description": "Pessimistic arrival: 10% chance the fire arrives sooner than this many minutes after t. None = not expected within the forecast horizon.",
+            "nullable": true
+          },
+          "burning": {
+            "type": "boolean",
+            "title": "Burning",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "t",
+          "h3",
+          "p_1h",
+          "p_2h",
+          "p_3h"
+        ],
+        "title": "FireOutlook",
+        "description": "Fire forecast for one map cell at time t. Produced by the nowcast engine."
+      },
+      "FireReport": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "lat": {
+            "type": "number",
+            "title": "Lat"
+          },
+          "lon": {
+            "type": "number",
+            "title": "Lon"
+          },
+          "h3": {
+            "type": "string",
+            "title": "H3"
+          },
+          "reported_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Reported At",
+            "description": "When the report reached dispatch"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "description": "What was reported, in words"
+          },
+          "location_precision_m": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Location Precision M",
+            "description": "How precisely the published record locates it",
+            "default": 250.0
+          },
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "description": "Citation (investigation report and page) or 'intake'"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "lat",
+          "lon",
+          "h3",
+          "reported_at",
+          "description",
+          "source"
+        ],
+        "title": "FireReport",
+        "description": "One report of fire at a place and time: a 911 call or radio report in live use; in the\nEaton replay, a timestamped report from the published investigations (FSRI, county review).\nReports were the main real-time signal that night: the VIIRS satellite's first detection of\nthe fire was at 1:30 a.m."
+      },
+      "FireReportIn": {
+        "properties": {
+          "address": {
+            "type": "string",
+            "title": "Address",
+            "description": "Nearest street address with house number and city. The backend looks up the coordinates.",
+            "nullable": true,
+            "example": "2260 N Lake Ave, Altadena, CA"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "description": "What was seen, in a short sentence"
+          },
+          "raw_text": {
+            "type": "string",
+            "title": "Raw Text",
+            "nullable": true
+          },
+          "reported_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Reported At",
+            "description": "When it was reported. Omit to use the replay clock's current time.",
+            "nullable": true
+          },
+          "lat": {
+            "type": "number",
+            "title": "Lat",
+            "description": "Only if known from a device, never estimated",
+            "nullable": true
+          },
+          "lon": {
+            "type": "number",
+            "title": "Lon",
+            "description": "Only if known from a device, never estimated",
+            "nullable": true
+          },
+          "location_precision_m": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Location Precision M",
+            "default": 250.0
+          }
+        },
+        "type": "object",
+        "required": [
+          "description"
+        ],
+        "title": "FireReportIn",
+        "description": "A fire sighting, structured by the Intake agent from a call or radio message."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HelpRequest": {
+        "properties": {
+          "address": {
+            "type": "string",
+            "title": "Address",
+            "description": "Street address with house number and city, as the caller said it. The backend looks up the coordinates.",
+            "nullable": true,
+            "example": "2260 N Lake Ave, Altadena, CA"
+          },
+          "needs": {
+            "type": "string",
+            "enum": [
+              "wheelchair",
+              "oxygen",
+              "bedbound",
+              "no_car",
+              "none"
+            ],
+            "title": "Needs",
+            "description": "wheelchair, oxygen, bedbound, no_car (can move but has no ride), or none"
+          },
+          "people": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "People",
+            "description": "How many people need the ride",
+            "default": 1
+          },
+          "notes": {
+            "type": "string",
+            "title": "Notes",
+            "nullable": true,
+            "example": "on oxygen, 2nd floor"
+          },
+          "raw_text": {
+            "type": "string",
+            "title": "Raw Text",
+            "description": "Original message, kept for audit",
+            "nullable": true
+          },
+          "reported_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Reported At",
+            "description": "When the call came in. Omit to use the replay clock's current time.",
+            "nullable": true
+          },
+          "lat": {
+            "type": "number",
+            "title": "Lat",
+            "description": "Only if known from a device, never estimated",
+            "nullable": true
+          },
+          "lon": {
+            "type": "number",
+            "title": "Lon",
+            "description": "Only if known from a device, never estimated",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "needs"
+        ],
+        "title": "HelpRequest",
+        "description": "A structured help request. The Intake agent turns free text into this; the backend\nfills in every number (coordinates, cell, vehicle types, load time)."
+      },
+      "OutlookSummary": {
+        "properties": {
+          "t": {
+            "type": "string",
+            "format": "date-time",
+            "title": "T"
+          },
+          "wind_speed_ms": {
+            "type": "number",
+            "title": "Wind Speed Ms"
+          },
+          "wind_from_deg": {
+            "type": "number",
+            "title": "Wind From Deg"
+          },
+          "cells_burning": {
+            "type": "integer",
+            "title": "Cells Burning"
+          },
+          "cells_p1h_over_50": {
+            "type": "integer",
+            "title": "Cells P1H Over 50"
+          },
+          "cells_p3h_over_50": {
+            "type": "integer",
+            "title": "Cells P3H Over 50"
+          },
+          "top_cells": {
+            "items": {
+              "$ref": "#/components/schemas/FireOutlook"
+            },
+            "type": "array",
+            "title": "Top Cells"
+          }
+        },
+        "type": "object",
+        "required": [
+          "t",
+          "wind_speed_ms",
+          "wind_from_deg",
+          "cells_burning",
+          "cells_p1h_over_50",
+          "cells_p3h_over_50",
+          "top_cells"
+        ],
+        "title": "OutlookSummary"
+      },
+      "Plan": {
+        "properties": {
+          "t": {
+            "type": "string",
+            "format": "date-time",
+            "title": "T"
+          },
+          "plan_id": {
+            "type": "string",
+            "title": "Plan Id",
+            "example": "p_20250107T2340"
+          },
+          "routes": {
+            "items": {
+              "$ref": "#/components/schemas/Route"
+            },
+            "type": "array",
+            "title": "Routes"
+          },
+          "unreachable": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Unreachable",
+            "description": "At-risk residents no vehicle can reach in time. Escalated, never dropped."
+          },
+          "reasons": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Reasons",
+            "description": "Plain-language reason per resident, filled in from engine numbers"
+          },
+          "escalated_fire_command": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Escalated Fire Command",
+            "description": "Subset of unreachable: too late, or only reachable through danger. These go to fire command (from docs/ARCHITECTURE.md)."
+          },
+          "strategy": {
+            "type": "string",
+            "title": "Strategy",
+            "default": "closest_first_stub"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "t",
+          "plan_id",
+          "routes",
+          "unreachable",
+          "reasons"
+        ],
+        "title": "Plan",
+        "description": "Output of the route optimizer at time t."
+      },
+      "PlanChange": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "reassign",
+              "remove_stop",
+              "add_stop",
+              "hold_vehicle"
+            ],
+            "title": "Kind"
+          },
+          "resident": {
+            "type": "string",
+            "title": "Resident",
+            "nullable": true
+          },
+          "vehicle": {
+            "type": "string",
+            "title": "Vehicle",
+            "nullable": true
+          },
+          "note": {
+            "type": "string",
+            "title": "Note",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind"
+        ],
+        "title": "PlanChange",
+        "description": "One edit a human made to a plan."
+      },
+      "Resident": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "example": "r_0412"
+          },
+          "lat": {
+            "type": "number",
+            "title": "Lat"
+          },
+          "lon": {
+            "type": "number",
+            "title": "Lon"
+          },
+          "h3": {
+            "type": "string",
+            "title": "H3",
+            "description": "H3 res-9 cell containing the home"
+          },
+          "needs": {
+            "type": "string",
+            "enum": [
+              "wheelchair",
+              "oxygen",
+              "bedbound",
+              "no_car",
+              "none"
+            ],
+            "title": "Needs"
+          },
+          "vehicle_types": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "wheelchair_van",
+                "ambulance",
+                "bus"
+              ]
+            },
+            "type": "array",
+            "title": "Vehicle Types",
+            "description": "Vehicle types that can carry them"
+          },
+          "load_minutes": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Load Minutes",
+            "description": "Time to get them into a vehicle"
+          },
+          "people": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "People",
+            "description": "People travelling together, including carers",
+            "default": 1
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "facility",
+              "estimated",
+              "registry",
+              "call",
+              "request"
+            ],
+            "title": "Source",
+            "default": "registry"
+          },
+          "known_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Known At",
+            "nullable": true
+          },
+          "notes": {
+            "type": "string",
+            "title": "Notes",
+            "nullable": true
+          },
+          "facility_id": {
+            "type": "string",
+            "title": "Facility Id",
+            "nullable": true
+          },
+          "address": {
+            "type": "string",
+            "title": "Address",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "lat",
+          "lon",
+          "h3",
+          "needs",
+          "vehicle_types",
+          "load_minutes"
+        ],
+        "title": "Resident",
+        "description": "One person who may need help evacuating. Care-facility residents come from real licensed\nfacilities; everyone else is estimated from Census counts (real addresses are not public)."
+      },
+      "Route": {
+        "properties": {
+          "vehicle": {
+            "type": "string",
+            "title": "Vehicle"
+          },
+          "stops": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Stops"
+          },
+          "eta_min": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Eta Min",
+            "description": "Minutes after t until arrival at each stop"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "vehicle",
+          "stops",
+          "eta_min"
+        ],
+        "title": "Route",
+        "description": "One vehicle's ordered stops. Stops are resident ids and shelter ids."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "VehicleRun": {
+        "properties": {
+          "vehicle": {
+            "type": "string",
+            "title": "Vehicle"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "free_in_min": {
+            "type": "number",
+            "title": "Free In Min",
+            "description": "Minutes until it finishes its current run"
+          },
+          "stops": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Stops",
+            "description": "Remaining stops in order: resident ids, then a shelter"
+          },
+          "eta_min": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Eta Min",
+            "description": "Minutes after t until each stop"
+          }
+        },
+        "type": "object",
+        "required": [
+          "vehicle",
+          "type",
+          "status",
+          "free_in_min",
+          "stops",
+          "eta_min"
+        ],
+        "title": "VehicleRun",
+        "description": "What one vehicle is doing at time t."
+      }
+    }
+  }
+}

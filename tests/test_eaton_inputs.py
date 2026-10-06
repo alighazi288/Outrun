@@ -11,9 +11,11 @@ Run locally after `uv run python scripts/build_detections.py` and
 from __future__ import annotations
 
 from collections import Counter
+from datetime import timedelta
 
 import pytest
 
+from backend.assumptions import FIRMS_LATENCY_MIN, HRRR_PUBLISH_LAG_MIN
 from backend.schemas import FireDetection, WindForecast
 from backend.store import DATASETS, EATON_DOWNLOAD_BOX, read_jsonl
 from engines.travel import haversine_m
@@ -47,8 +49,11 @@ _STATIC_LAT = 34.153
 _STATIC_LON = -118.193
 _STATIC_RADIUS_M = 1_000.0
 
-# Valid satellite source names
-_VALID_SOURCES = {"VIIRS_SNPP", "VIIRS_NOAA20", "VIIRS_NOAA21", "GOES18_FDCC"}
+# Valid satellite source names (schema list)
+_VALID_SOURCES = {"VIIRS_SNPP", "VIIRS_NOAA20", "VIIRS_NOAA21", "GOES18"}
+
+# Valid confidence values
+_VALID_CONFIDENCE = {"low", "nominal", "high"}
 
 # Valid fxx offsets for HRRR (0–3 hours)
 _VALID_FXX_HOURS = {0, 1, 2, 3}
@@ -106,7 +111,7 @@ def test_detections_inside_study_box(detections: list[FireDetection]) -> None:
 
 @skip_if_no_detections
 def test_detections_valid_sources(detections: list[FireDetection]) -> None:
-    """Every detection source must be one of the four known satellite sources."""
+    """Every detection source must be one of the known satellite sources."""
     bad = [d.id for d in detections if d.source not in _VALID_SOURCES]
     assert not bad, (
         f"Detections with unknown source: {bad[:5]} "
@@ -127,6 +132,54 @@ def test_detections_no_static_heat_source(detections: list[FireDetection]) -> No
     )
 
 
+@skip_if_no_detections
+def test_detections_confidence_vocabulary(detections: list[FireDetection]) -> None:
+    """confidence must be low/nominal/high (schema words) or None."""
+    bad = [
+        d.id
+        for d in detections
+        if d.confidence is not None and d.confidence not in _VALID_CONFIDENCE
+    ]
+    assert not bad, (
+        f"Detections with invalid confidence value: {bad[:5]} "
+        f"(valid: {sorted(_VALID_CONFIDENCE)} or None)"
+    )
+
+
+@skip_if_no_detections
+def test_goes_detections_pixel_m_2000(detections: list[FireDetection]) -> None:
+    """GOES detections must have pixel_m == 2000."""
+    bad = [
+        d.id
+        for d in detections
+        if d.source == "GOES18" and d.pixel_m != 2000.0
+    ]
+    assert not bad, f"GOES detections with pixel_m != 2000: {bad[:5]}"
+
+
+@skip_if_no_detections
+def test_goes_source_name(detections: list[FireDetection]) -> None:
+    """Source name for GOES must be 'GOES18', not 'GOES18_FDCC'."""
+    bad = [d.id for d in detections if d.source == "GOES18_FDCC"]
+    assert not bad, f"Detections still using deprecated source 'GOES18_FDCC': {bad[:5]}"
+
+
+@skip_if_no_detections
+def test_viirs_visible_from_equals_observed_plus_firms_latency(
+    detections: list[FireDetection],
+) -> None:
+    """Every VIIRS row's visible_from() must equal observed_at + FIRMS_LATENCY_MIN."""
+    viirs = [d for d in detections if d.source.startswith("VIIRS")]
+    bad = [
+        d.id
+        for d in viirs
+        if d.visible_from() != d.observed_at + timedelta(minutes=FIRMS_LATENCY_MIN)
+    ]
+    assert not bad, (
+        f"VIIRS rows where visible_from() != observed_at + {FIRMS_LATENCY_MIN} min: {bad[:5]}"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Wind
 # ---------------------------------------------------------------------------
@@ -142,51 +195,62 @@ def test_wind_not_empty(wind: list[WindForecast]) -> None:
 
 
 @skip_if_no_wind
+def test_wind_run_at_set_issued_at_none(wind: list[WindForecast]) -> None:
+    """Files use run_at (the cycle time); issued_at must be unset (None)."""
+    bad_no_run = [i for i, w in enumerate(wind) if w.run_at is None]
+    bad_has_issued = [i for i, w in enumerate(wind) if w.issued_at is not None]
+    assert not bad_no_run, f"Wind rows with run_at=None at indices: {bad_no_run[:5]}"
+    assert not bad_has_issued, (
+        f"Wind rows with issued_at set (should be None) at indices: {bad_has_issued[:5]}"
+    )
+
+
+@skip_if_no_wind
 def test_wind_times_have_tz_offset(wind: list[WindForecast]) -> None:
-    bad_issued = [i for i, w in enumerate(wind) if not _has_tz(w.issued_at)]
+    bad_run = [i for i, w in enumerate(wind) if not _has_tz(w.run_at)]
     bad_valid = [i for i, w in enumerate(wind) if not _has_tz(w.valid_at)]
-    assert not bad_issued, f"Wind rows with naive issued_at at indices: {bad_issued[:5]}"
+    assert not bad_run, f"Wind rows with naive run_at at indices: {bad_run[:5]}"
     assert not bad_valid, f"Wind rows with naive valid_at at indices: {bad_valid[:5]}"
 
 
 @skip_if_no_wind
+def test_wind_run_at_on_the_hour(wind: list[WindForecast]) -> None:
+    """run_at must be on the hour (seconds == minutes == 0) – HRRR cycle times."""
+    bad = [
+        i
+        for i, w in enumerate(wind)
+        if w.run_at.minute != 0 or w.run_at.second != 0 or w.run_at.microsecond != 0
+    ]
+    assert not bad, (
+        f"Wind rows where run_at is not on the hour at indices: {bad[:5]}\n"
+        f"  example: {wind[bad[0]].run_at}"
+    )
+
+
+@skip_if_no_wind
 def test_wind_fxx_is_0_to_3_hours(wind: list[WindForecast]) -> None:
-    """valid_at - issued_at must be exactly 0, 1, 2, or 3 hours (HRRR fxx 0–3)."""
+    """valid_at - run_at must be exactly 0, 1, 2, or 3 hours (HRRR fxx 0–3)."""
     bad = []
     for i, w in enumerate(wind):
-        delta = w.valid_at - w.issued_at
+        delta = w.valid_at - w.run_at
         hours = delta.total_seconds() / 3600
         if hours not in _VALID_FXX_HOURS:
             bad.append((i, hours))
     assert not bad, (
-        f"Wind rows where valid_at - issued_at is not in {{0,1,2,3}} h: "
+        f"Wind rows where valid_at - run_at is not in {{0,1,2,3}} h: "
         f"{bad[:5]}"
     )
 
 
 @skip_if_no_wind
-def test_wind_issued_at_on_the_hour(wind: list[WindForecast]) -> None:
-    """issued_at must be on the hour (seconds == minutes == 0) – HRRR cycle times."""
-    bad = [
-        i
-        for i, w in enumerate(wind)
-        if w.issued_at.minute != 0 or w.issued_at.second != 0 or w.issued_at.microsecond != 0
-    ]
-    assert not bad, (
-        f"Wind rows where issued_at is not on the hour at indices: {bad[:5]}\n"
-        f"  example: {wind[bad[0]].issued_at}"
-    )
-
-
-@skip_if_no_wind
-def test_wind_uniform_point_count_per_issued_valid_pair(wind: list[WindForecast]) -> None:
-    """Every (issued_at, valid_at) pair must have the same number of grid points."""
+def test_wind_uniform_point_count_per_run_valid_pair(wind: list[WindForecast]) -> None:
+    """Every (run_at, valid_at) pair must have the same number of grid points."""
     counts: Counter[tuple] = Counter(
-        (w.issued_at, w.valid_at) for w in wind
+        (w.run_at, w.valid_at) for w in wind
     )
     distinct_counts = set(counts.values())
     assert len(distinct_counts) == 1, (
-        f"Unequal point counts per (issued_at, valid_at) pair: "
+        f"Unequal point counts per (run_at, valid_at) pair: "
         f"found counts {sorted(distinct_counts)}"
     )
 
@@ -205,3 +269,17 @@ def test_wind_inside_study_box(wind: list[WindForecast]) -> None:
 def test_wind_dir_from_deg_in_range(wind: list[WindForecast]) -> None:
     bad = [i for i, w in enumerate(wind) if not (0 <= w.dir_from_deg < 360)]
     assert not bad, f"Wind rows with dir_from_deg outside [0, 360) at indices: {bad[:5]}"
+
+
+@skip_if_no_wind
+def test_wind_visible_from_equals_run_at_plus_publish_lag(wind: list[WindForecast]) -> None:
+    """Every wind row's visible_from() must equal run_at + HRRR_PUBLISH_LAG_MIN."""
+    bad = [
+        i
+        for i, w in enumerate(wind)
+        if w.visible_from() != w.run_at + timedelta(minutes=HRRR_PUBLISH_LAG_MIN)
+    ]
+    assert not bad, (
+        f"Wind rows where visible_from() != run_at + {HRRR_PUBLISH_LAG_MIN} min "
+        f"at indices: {bad[:5]}"
+    )
