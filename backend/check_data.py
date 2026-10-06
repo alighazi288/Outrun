@@ -78,6 +78,12 @@ def check_dataset(folder: Path) -> list[Finding]:
         add("error", "meta.json", None, f"h3_res must be {H3_RES}")
     box = meta.get("bbox", {})
     real = meta.get("synthetic") is False
+    if real:
+        try:
+            parse_t(meta["fire_start"])
+        except (KeyError, ValueError):
+            add("error", "meta.json", None, "a real dataset needs fire_start (ignition time with "
+                "an offset) and fire_start_source; it bounds every arrival window")
     try:
         start = parse_t(meta["replay"]["start"])
         end = parse_t(meta["replay"]["end"])

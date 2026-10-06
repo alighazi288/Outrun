@@ -138,3 +138,29 @@ def test_router_driver_safety(store, router, hhmm):
             else:
                 leave = eta + UNLOAD_MIN
             pos, depart = here, leave
+
+
+def test_coarse_evidence_marks_only_its_centre_burning():
+    """A 2 km GOES pixel or a report placed to within 1 km means fire is somewhere in that
+    area, not that all of it burns: only DETECTION_RADIUS_M around the centre is burning."""
+    import h3 as h3lib
+
+    from backend.schemas import FireDetection, FireReport
+    from engines.nowcast import DETECTION_RADIUS_M, nowcast
+    from engines.travel import haversine_m
+
+    t = pt("22:00")
+    centre = (34.19, -118.12)
+    cell = h3lib.latlng_to_cell(*centre, 9)
+    cells = list(h3lib.grid_disk(cell, 8))  # about 3 km around the centre
+    goes = FireDetection(id="g", lat=centre[0], lon=centre[1], h3=cell, observed_at=pt("21:50"),
+                         available_at=pt("21:50"), source="GOES18", pixel_m=2000)
+    vague = FireReport(id="r", lat=centre[0], lon=centre[1], h3=cell, reported_at=pt("21:50"),
+                       description="fire somewhere near here", location_precision_m=1000,
+                       source="test")
+    for evidence in ({"detections": [goes]}, {"reports": [vague]}):
+        out = nowcast(evidence.get("detections", []), [], cells, t, evidence.get("reports", []))
+        burning = [o.h3 for o in out if o.burning]
+        assert burning, "the centre still counts as burning"
+        for c in burning:
+            assert haversine_m(centre, h3lib.cell_to_latlng(c)) <= DETECTION_RADIUS_M

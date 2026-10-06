@@ -9,7 +9,7 @@ Reports matter: on the Eaton night the VIIRS satellite's first detection came at
 hours after the first reports of fire west of Lake Avenue.
 
 How the stub works:
-1. Cells within a detection's pixel size (pixel_m), or within a report's stated location
+1. Cells within DETECTION_RADIUS_M of a detection or a report
    precision of a report, are burning (arrival = 0).
 2. The active fire front is the evidence from the last ACTIVE_WINDOW.
 3. Fire spreads fastest downwind and slowest upwind (an ellipse). The spread rate in any
@@ -34,7 +34,7 @@ from backend.schemas import FireDetection, FireOutlook, FireReport, WindForecast
 
 BACKING_RATE_M_PER_MIN = 3.0  # spread against the wind
 HEAD_RATE_M_PER_MIN_PER_MS = 0.7  # extra head-fire speed per m/s of wind
-DETECTION_RADIUS_M = 375.0  # VIIRS pixel size: the smallest radius any fire evidence gets
+DETECTION_RADIUS_M = 375.0  # VIIRS pixel size: the area around any evidence that counts as burning
 ACTIVE_WINDOW = timedelta(hours=2)
 SIGMA = 0.4  # log-normal spread of the rate (uncertainty)
 MIN_P_TO_REPORT = 0.01
@@ -62,11 +62,12 @@ def nowcast(
 
     Inputs are already filtered to what existed at t (DataStore.at(t)).
     """
-    evidence = [_Evidence(d.lat, d.lon, d.observed_at, d.pixel_m) for d in detections]
-    evidence += [
-        _Evidence(r.lat, r.lon, r.reported_at, max(r.location_precision_m, DETECTION_RADIUS_M))
-        for r in reports
-    ]
+    # Only the centre of each piece of evidence counts as burning. A 2 km GOES pixel or a report
+    # placed to within 1 km says the fire is somewhere in that area, not that all of it burns
+    # (marking whole pixels put 211 of 579 real cells "burning" by 20:00). Spreading that
+    # location uncertainty is the real version's job.
+    evidence = [_Evidence(d.lat, d.lon, d.observed_at, DETECTION_RADIUS_M) for d in detections]
+    evidence += [_Evidence(r.lat, r.lon, r.reported_at, DETECTION_RADIUS_M) for r in reports]
     if not evidence:
         return []
     speed, dir_to = wind_at(wind, t)

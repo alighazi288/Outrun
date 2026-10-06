@@ -18,6 +18,12 @@ from backend.store import DATA_DIR, DATASETS
 
 GEOID = "0601290"  # Altadena CDP, California
 MARGIN_KM = 1.0  # data/BUILD.md: "study area = Altadena boundary + 1 km"
+# Ignition, the lower bound of every arrival window (evaluation/arrival_window.py). Not the
+# replay start, which is a clock setting.
+FIRE_START = "2025-01-07T18:18:00-08:00"
+FIRE_START_SOURCE = ("Eaton Fire reported at 6:18 p.m. Jan 7, 2025: McChrystal after-action "
+                     "review timeline (DATA_SOURCES.md). Used only as the lower bound of the "
+                     "arrival window.")
 TIGERWEB = ("https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/"
             "Places_CouSub_ConCity_SubMCD/MapServer/26/query")  # layer 26: Census 2020 CDPs
 RAW = DATA_DIR / "raw" / "census" / f"cdp_{GEOID}_2020.geojson"
@@ -65,6 +71,8 @@ def main() -> None:
         "h3_res": 9,
         "replay": {"start": "2025-01-07T18:00:00-08:00", "end": "2025-01-08T06:00:00-08:00",
                    "step_minutes": 10},
+        "fire_start": FIRE_START,
+        "fire_start_source": FIRE_START_SOURCE,
         "study_area": {
             "source": f"US Census Bureau TIGERweb, Census 2020: {props['NAME']} "
                       f"(GEOID {props['GEOID']})",

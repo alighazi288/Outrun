@@ -48,3 +48,12 @@ def test_catches_common_mistakes(tmp_path):
                      "NEED_PROFILES", "isn't in facilities.jsonl", "published before seen",
                      "'low', 'nominal' or 'high'"):
         assert expected in messages, expected
+
+
+def test_real_dataset_needs_fire_start(tmp_path):
+    folder = tmp_path / "real"
+    folder.mkdir()
+    meta = json.loads((DATASETS["eaton"] / "meta.json").read_text())
+    meta.pop("fire_start")
+    (folder / "meta.json").write_text(json.dumps(meta))
+    assert any("fire_start" in f.message for f in _errors(folder))
