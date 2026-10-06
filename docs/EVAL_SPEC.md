@@ -51,6 +51,9 @@ true under every report. We present evidence and assign no blame.
   the DINS-validated times in the investigations.
 - **Strict scoring (headline):** a pickup counts only if the vehicle left the hex before the
   window's **earliest** time. Lenient scoring (latest time) is reported as secondary.
+- Built by `evaluation/arrival_window.py` (`make arrival-window`) into `arrival_window.jsonl`.
+  A report names a hex only if `location_precision_m` ≤ 500 m. A hex only DINS reached has no
+  time of its own: latest = end of the night, flagged `dins_only`, and the count is reported.
 
 ## 4. Who the planner knows about (`backend/knowledge.py`)
 
@@ -93,7 +96,7 @@ For every hex a vehicle occupies (stops and the hexes between them):
 **Planners.** All share the same forecast, deadlines, safety rule, capacities, information,
 approval delay and 10-minute re-planning. They differ only in who goes where.
 - **Ours.** Stub(closest first). OR-Tools pickup-and-delivery by the Oct 18 freeze.
-- **Dispatcher rule** (`plan_routes_dispatcher` in `engines/routing.py`). Each free vehicle goes to the most urgent person (earliest deadline) it can carry and reach safely; nearest breaks ties. This is the bar to beat.
+- **Dispatcher rule** (`plan_routes_dispatcher` in `engines/routing.py`, ranking in `evaluation/heuristic.py`). Most urgent resident first (earliest deadline). The nearest vehicle that can carry them and reach them safely takes that resident. The same deadline goes to whoever a vehicle can reach sooner. One round gives each free vehicle at most one new pickup. This is the bar to beat.
 - **Closest first** (the `plan_routes` stub). The weaker baseline, run at the baseline settings only.
 - A vehicle's current leg is never interrupted, for any planner. This comes in with vehicle movement.
 

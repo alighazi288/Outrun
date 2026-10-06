@@ -4,7 +4,7 @@
 -include .env
 export
 
-.PHONY: help install test lint fix check api export view eval check-data fixtures openapi clean
+.PHONY: help install test lint fix check api export view eval arrival-window check-data fixtures openapi clean
 
 help:  ## List commands
 	@grep -hE '^[a-z]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-9s %s\n", $$1, $$2}'
@@ -35,6 +35,9 @@ view: export  ## Play the replay in the stand-in viewer: http://localhost:8001/s
 
 eval:  ## Score our planner vs the dispatcher rule (STAND-IN; ~15 s)
 	uv run python -m evaluation.standin
+
+arrival-window:  ## Build arrival_window.jsonl (when fire reached each hex) for OUTRUN_DATASET
+	uv run python scripts/build_arrival_window.py
 
 check-data:  ## Check a dataset against the data contract (DATASET=eaton by default)
 	uv run python -m backend.check_data $(or $(DATASET),eaton)

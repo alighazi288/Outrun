@@ -4,14 +4,16 @@ dispatcher rule?
     uv run python -m evaluation.standin          # or: make eval
 
 Headline metric (EVAL_SPEC §7): of the vulnerable residents whose hex the fire reached, the
-share picked up before the fire got there. Both planners get identical everything (same data,
-same people known at the same times, same safety rule); only the planner differs.
+share picked up before the fire's EARLIEST plausible arrival (strict). The lenient count,
+against the LATEST plausible arrival (first evidence of fire), is printed beside it. Both
+planners get identical everything (same data, same people known at the same times, same
+safety rule); only the planner differs.
+
+The arrival window comes from `evaluation/arrival_window.py`: DINS for which hexes burned,
+VIIRS passes for when they were last seen clear and first seen burning, published reports
+for the hours before the first satellite pass.
 
 What makes this a stand-in:
-- Truth: a hex's fire arrival is the FIRST evidence of fire there (a satellite detection within
-  375 m of its centre, or a fire report located in it). The real version builds a window from
-  DINS damage, satellite passes and the report timelines, and scores against its EARLIEST
-  time (strict); first evidence is the window's latest time, so this is the lenient end.
 - 5 random draws (seeds) of who is known and when (who's on the registry, when each person
   calls), on one fixed population. The real version: 30 synthetic populations per setting,
   plus the settings sweep.
@@ -22,66 +24,58 @@ from __future__ import annotations
 
 import argparse
 import statistics
-from dataclasses import dataclass
 from datetime import datetime
 
-import h3
-
+from backend.clock import parse_t
 from backend.replay import Replay
 from backend.schemas import Resident
 from backend.store import DataStore
 from engines.routing import plan_routes, plan_routes_dispatcher
-from engines.travel import haversine_m
-
-DETECTION_RADIUS_M = 375.0  # a VIIRS pixel; EVAL_SPEC §3 (coarser GOES pixels aren't truth)
+from evaluation.arrival_window import (
+    ArrivalWindow,
+    Score,
+    build_windows,
+    fire_start_of,
+    load_dins,
+)
+from evaluation.arrival_window import score as score_window
 
 PLANNERS = {"ours": plan_routes, "dispatcher rule": plan_routes_dispatcher}
 
 
+def arrival_windows(store: DataStore) -> dict[str, ArrivalWindow]:
+    """The whole night (hindsight), so it's for scoring only, never for planning."""
+    return build_windows(
+        store.cells, store.detections, store.reports, load_dins(store.folder / "dins.geojson"),
+        fire_start_of(store.meta), parse_t(store.meta["replay"]["end"]),
+    )
+
+
 def fire_arrival(store: DataStore, hexes: set[str]) -> dict[str, datetime]:
-    """Hex -> first evidence of fire there. Uses the whole night (hindsight), so it's for
-    scoring only, never for planning."""
-    arrival: dict[str, datetime] = {}
-
-    def seen(cell: str, when: datetime) -> None:
-        if cell not in arrival or when < arrival[cell]:
-            arrival[cell] = when
-
-    for cell in hexes:
-        centre = h3.cell_to_latlng(cell)
-        for d in store.detections:
-            if d.pixel_m <= DETECTION_RADIUS_M and \
-                    haversine_m(centre, (d.lat, d.lon)) <= DETECTION_RADIUS_M:
-                seen(cell, d.observed_at)
-    for r in store.reports:
-        if r.h3 in hexes:
-            seen(r.h3, r.reported_at)
-    return arrival
-
-
-@dataclass
-class Score:
-    reached: int  # vulnerable residents whose hex the fire reached
-    saved: int  # of those, picked up before the fire got there
+    """Hex -> latest plausible arrival (first evidence of fire). Kept for the lenient score."""
+    return {c: w.latest for c, w in arrival_windows(store).items() if c in hexes}
 
 
 def score(population: list[Resident], picked_up: dict[str, datetime],
           arrival: dict[str, datetime]) -> Score:
-    """One count per resident record; `none` needs excluded (EVAL_SPEC §7)."""
+    """Lenient score against a single arrival time per hex."""
     reached = [r for r in population if r.needs != "none" and r.h3 in arrival]
     saved = [r for r in reached if r.id in picked_up and picked_up[r.id] < arrival[r.h3]]
     return Score(reached=len(reached), saved=len(saved))
 
 
-def run(seeds: list[int]) -> dict[str, list[Score]]:
-    """Score every planner on every seed (a draw of who is known and when)."""
-    results: dict[str, list[Score]] = {name: [] for name in PLANNERS}
+def run(seeds: list[int]) -> dict[str, list[tuple[Score, Score]]]:
+    """Per planner and seed: (strict, lenient) scores. A seed is a draw of who is known when."""
+    results: dict[str, list[tuple[Score, Score]]] = {name: [] for name in PLANNERS}
     for seed in seeds:
         store = DataStore.from_env(seed=seed)
-        arrival = fire_arrival(store, {r.h3 for r in store.population})
+        windows = arrival_windows(store)
         for name, planner in PLANNERS.items():
             final = Replay(store, planner=planner).run()[-1]
-            results[name].append(score(store.population, final.picked_up, arrival))
+            results[name].append((
+                score_window(store.population, final.picked_up, windows, strict=True),
+                score_window(store.population, final.picked_up, windows, strict=False),
+            ))
     return results
 
 
@@ -98,16 +92,18 @@ def main() -> None:
     if "fake" in dataset:
         print("FAKE DATA: these numbers only show the pipeline works. Don't quote them.")
     print("\nPeople picked up before the fire reached their home, out of the vulnerable people")
-    print("it reached. Same seed = same people known at the same times; only the planner")
-    print("differs.\n")
-    print("  seed   reached   ours   dispatcher rule   ours - rule")
+    print("it reached. strict = before the earliest plausible arrival (headline);")
+    print("lenient = before the first evidence of fire. Same seed = same people known at the")
+    print("same times; only the planner differs.\n")
+    print("  seed  reached   ours strict/lenient   rule strict/lenient   ours - rule (strict)")
     diffs = []
-    for seed, o, r in zip(seeds, ours, rule, strict=True):
-        diffs.append(o.saved - r.saved)
-        print(f"  {seed:>4}   {o.reached:>7}   {o.saved:>4}   {r.saved:>15}   {diffs[-1]:>+11}")
+    for seed, (o_s, o_l), (r_s, r_l) in zip(seeds, ours, rule, strict=True):
+        diffs.append(o_s.saved - r_s.saved)
+        print(f"  {seed:>4}  {o_s.reached:>7}   {o_s.saved:>8} / {o_l.saved:<8}  "
+              f"{r_s.saved:>8} / {r_l.saved:<8}  {diffs[-1]:>+10}")
     median = statistics.median
-    print(f"\n  median: ours {median(s.saved for s in ours):g}, "
-          f"dispatcher rule {median(s.saved for s in rule):g}, "
+    print(f"\n  strict median: ours {median(s.saved for s, _ in ours):g}, "
+          f"dispatcher rule {median(s.saved for s, _ in rule):g}, "
           f"difference {median(diffs):+g} (range {min(diffs):+} to {max(diffs):+})")
 
 

@@ -14,6 +14,8 @@
     "end": "2025-01-08T06:00:00-08:00",
     "step_minutes": 10
   },
+  "fire_start": "2025-01-07T18:18:00-08:00",
+  "fire_start_source": "Eaton Fire reported at 6:18 p.m. Jan 7, 2025: McChrystal after-action review timeline (DATA_SOURCES.md). Used only as the lower bound of the arrival window.",
   "study_area": {
     "source": "US Census Bureau TIGERweb, Census 2020: Altadena CDP (GEOID 0601290)",
     "margin_km": 1.0,

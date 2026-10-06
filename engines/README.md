@@ -14,7 +14,7 @@ and agents work end to end. We can then replace the stub behind the **same signa
 | `risk.py` | `prioritize(residents, outlook, t)` → `list[ResidentRisk]` | deadline = p10 arrival − margin (latest time to *leave*); priority = p_3h × weight | P(fire arrives before our earliest pickup) × weight |
 | `travel.py` | `TravelTime.minutes(a, b)` | straight line × 1.3 at 30 km/h | OSMnx shortest path at `SPEED_FACTOR` × road speed, blocked roads removed; reports the hexes on the path |
 | `routing.py` | `plan_routes(risks, residents, vehicles, shelters, outlook, travel, t, previous_plan)` → `Plan` | closest first, within the safety rule | OR-Tools pickup-and-delivery + rolling re-plan |
-| `routing.py` | `plan_routes_dispatcher(...)`, same signature | most urgent first (earliest deadline), nearest breaks ties | stays as the bar to beat |
+| `routing.py` | `plan_routes_dispatcher(...)`, same signature | most urgent first (earliest deadline), nearest suitable vehicle | this is the bar; the ranking is in `evaluation/heuristic.py` |
 
 ## Rules for every implementation
 1. **Never drop anyone silently.** Every at-risk resident ends up in a route or in `unreachable`.
