@@ -13,7 +13,8 @@ out of scope.
 | `wind.jsonl` | Eaton detections and wind | Daniel | NOAA HRRR via `herbie` | `issued_at` = when the forecast run was available |
 | `fire_reports.jsonl` | (suggested card) | Bhavaani | FSRI and county investigation timelines | Hand-extract time, place, words and citation (with page) into a CSV, then geocode. Set `location_precision_m` honestly: a street is about 250 m, an area about 1 km |
 | `evac_orders.jsonl` | Arrival window | Bhavaani | McChrystal review, news timelines | Real zones and times, one citation per row |
-| `dins.geojson` | Arrival window | Bhavaani | CAL FIRE DINS | Scoring only. Never loaded by the replay |
+| `dins.geojson` | Arrival window | Bhavaani | CAL FIRE DINS | Scoring only. Never loaded by the replay. Keep the `DAMAGE` column |
+| `arrival_window.jsonl` | Arrival window | Bhavaani | derived: `make arrival-window` | Earliest and latest plausible arrival per reached hex (`evaluation/arrival_window.py`). Rebuild after detections, reports or DINS change |
 | `residents.jsonl` | Synthetic residents | Rachel | Census ACS + Microsoft building footprints | `source: "estimated"`. Who is known when is applied at load by `backend/knowledge.py` |
 | `facilities.jsonl` (+ facility residents) | Synthetic residents | Rachel | CA Community Care Licensing | Licensed capacity; a needs mix per facility type |
 | `roads.graphml` | Roads and a first route map | Rachel | OpenStreetMap via `osmnx` | Too big for git |

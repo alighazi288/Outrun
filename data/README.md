@@ -19,6 +19,7 @@ a record is read, so the evaluation can test other delays without rebuilding any
 | `vehicles.jsonl` | one vehicle | `Vehicle` | none |
 | `shelters.jsonl` | one drop-off point, with a citation | `Shelter` | `opened_at` (none = open before the fire) |
 | `dins.geojson` (real data only) | which buildings burned | for scoring only | never loaded by the replay |
+| `arrival_window.jsonl` (derived) | one reached hex: earliest and latest plausible fire arrival | `evaluation.arrival_window.ArrivalWindow`; built by `make arrival-window` from detections, reports and DINS | never loaded by the replay |
 
 **`residents.jsonl` is the whole population**, the truth the evaluation scores against. Who the
 planner knows about, and from when, is applied when the dataset loads (`backend/knowledge.py`):

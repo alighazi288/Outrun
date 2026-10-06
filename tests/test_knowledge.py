@@ -30,7 +30,7 @@ def test_facility_residents_are_known_from_the_start(store):
 def test_calls_only_use_records_that_existed(store):
     """The trigger must be computable from records published at or before it."""
     k = _assign(store)
-    orders, reports, detections = store.orders, store.reports, store.detections
+    orders, reports = store.orders, store.reports
     for r in k.residents:
         if r.source != "call":
             continue
@@ -38,7 +38,7 @@ def test_calls_only_use_records_that_existed(store):
         assert trigger + timedelta(minutes=15) <= r.known_at  # handling delay is applied
         visible = [
             (e.lat, e.lon, e.visible_from())
-            for e in [*reports, *detections] if e.visible_from() <= trigger
+            for e in reports if e.visible_from() <= trigger
         ]
         past_orders = [o for o in orders if o.issued_at <= trigger]
         assert first_trigger(r, past_orders, visible, 2.0) == trigger
@@ -60,3 +60,13 @@ def test_settings_stay_paired(store):
 
 def test_never_call_removes_people(store):
     assert len(_assign(store, never_call=1.0, fraction_known=0.0).never_known) > 0
+
+
+def test_a_satellite_detection_does_not_start_a_call(store):
+    person = next(r for r in store.population if r.source == "estimated")
+    det = store.detections[0].model_copy(update={"lat": person.lat, "lon": person.lon})
+    k = assign_knowledge(
+        [person], [], [], [det], seed=1, params=KnowledgeParams(fraction_known=0),
+    )
+    assert k.residents == []
+    assert k.never_known == [person.id]

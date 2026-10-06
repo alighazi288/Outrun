@@ -3,9 +3,9 @@
 Two greedy planners live here, both obeying the same rules:
 - `plan_routes` (STUB for ours): "closest first". Each free vehicle goes to the nearest waiting
   person it can carry and reach safely in time. Also the "closest first" baseline.
-- `plan_routes_dispatcher`: the dispatcher rule, the bar ours must beat. Each free vehicle goes
-  to the most urgent person (earliest deadline) it can carry and reach safely in time; nearest
-  breaks ties.
+- `plan_routes_dispatcher`: the dispatcher rule, the bar ours must beat. Most urgent resident
+  first (earliest deadline), then the nearest vehicle that can carry them and reach them
+  safely. The ranking policy lives in `evaluation/heuristic.py`.
 
 The real version of ours is OR-Tools pickup-and-delivery (seat, wheelchair and stretcher
 capacities; deadlines as time windows; priority as the penalty for leaving someone out),
@@ -152,6 +152,7 @@ class _Option:
     eta: float
     leave: float
     deadline: float | None
+    travel: float
 
 
 class _Planner:
@@ -162,6 +163,7 @@ class _Planner:
         self.shelters = shelters
         self.travel = travel
         self.safety = SafetyMap(outlook)
+        self.strategy = ""
 
     def option(self, pos: LatLon, clock: float, fits: bool, rid: str) -> _Option | None:
         """Can a vehicle at `pos`, free at `clock`, safely pick up `rid` in time?"""
@@ -179,7 +181,7 @@ class _Planner:
             return None
         if not self.safety.hex_ok(r.h3, leave) or self.escape(here, leave) is None:
             return None
-        return _Option(rid, eta, leave, deadline)
+        return _Option(rid, eta, leave, deadline, minutes)
 
     def escape(self, pos: LatLon, depart: float) -> Shelter | None:
         """Nearest shelter reachable from `pos` by a safe leg, leaving at `depart`."""
@@ -198,6 +200,7 @@ class _Planner:
         vs._empty()
 
     def run(self, choose: Callable[[_Option], tuple], t: datetime, strategy: str) -> Plan:
+        self.strategy = strategy
         pending = [
             k.resident_id for k in self.risk.values() if k.at_risk and k.resident_id in self.res
         ]
@@ -224,10 +227,59 @@ class _Planner:
                 elif vs.onboard and self.shelters:
                     self.drop_off(vs)
                     progressed = True
+        return self._finish(pending, states, chosen, t, strategy)
+
+    def run_dispatcher(self, t: datetime) -> Plan:
+        """Most urgent first, nearest suitable vehicle. See evaluation/heuristic.py."""
+        from evaluation.heuristic import DispatchOption, assign_round
+
+        self.strategy = "dispatcher_rule"
+        pending = [
+            k.resident_id for k in self.risk.values() if k.at_risk and k.resident_id in self.res
+        ]
+        states = [
+            _VehicleState(v, (v.lat, v.lon), clock=v.available_in_min) for v in self.vehicles
+        ]
+        by_id = {s.vehicle.id: s for s in states}
+        chosen: dict[str, tuple[str, _Option]] = {}
+
+        while pending:
+            cached: dict[tuple[str, str], _Option] = {}
+            options = []
+            for vs in states:
+                for rid in pending:
+                    fit = self.option(vs.pos, vs.clock, vs.fits(self.res[rid]), rid)
+                    if fit is None:
+                        continue
+                    cached[(vs.vehicle.id, rid)] = fit
+                    options.append(DispatchOption(
+                        resident_id=rid,
+                        vehicle_id=vs.vehicle.id,
+                        deadline=fit.deadline,
+                        travel_min=fit.travel,
+                        eta=fit.eta,
+                    ))
+            if not options:
+                loaded = [vs for vs in states if vs.onboard and self.shelters]
+                if not loaded:
+                    break
+                for vs in loaded:
+                    self.drop_off(vs)
+                continue
+            # Positions stay put until the whole round is chosen, so one vehicle cannot
+            # take a second person before the other free vehicles have been offered one.
+            for pick in assign_round(options):
+                vs = by_id[pick.vehicle_id]
+                fit = cached[(pick.vehicle_id, pick.resident_id)]
+                vs.pick_up(self.res[pick.resident_id], fit.eta)
+                chosen[pick.resident_id] = (pick.vehicle_id, fit)
+                pending.remove(pick.resident_id)
+        return self._finish(pending, states, chosen, t, "dispatcher_rule")
+
+    def _finish(self, pending, states, chosen, t: datetime, strategy: str) -> Plan:
         for vs in states:
             if vs.onboard and self.shelters:
                 self.drop_off(vs)
-
         reasons = {rid: self.routed_reason(rid, *chosen[rid]) for rid in chosen}
         fire_command = []
         for rid in pending:
@@ -239,9 +291,9 @@ class _Planner:
             plan_id=plan_id_for(t),
             routes=[
                 Route(vehicle=s.vehicle.id, stops=s.stops, eta_min=s.etas)
-                for s in states if s.stops
+                for s in sorted(states, key=lambda s: s.vehicle.id) if s.stops
             ],
-            unreachable=pending,
+            unreachable=list(pending),
             reasons=reasons,
             escalated_fire_command=fire_command,
             strategy=strategy,
@@ -258,6 +310,18 @@ class _Planner:
         text += f". {vehicle} arrives in {o.eta:.0f} min"
         if o.deadline is not None:
             text += f" and leaves {o.deadline - o.leave:.0f} min before the deadline"
+        if self.strategy == "dispatcher_rule":
+            away = f"{o.travel:.0f} min away"
+            if o.deadline is not None:
+                text += (
+                    f". Dispatcher rule: earliest deadline ({o.deadline:.0f} min), "
+                    f"nearest suitable vehicle ({away})"
+                )
+            else:
+                text += (
+                    ". Dispatcher rule: no arrival inside the horizon, so this person waits "
+                    f"behind anyone with a deadline; nearest suitable vehicle ({away})"
+                )
         return text + "."
 
     def unreachable_reason(self, rid: str) -> tuple[str, bool]:
@@ -275,9 +339,13 @@ class _Planner:
             for v in compatible
         )
         if fastest > limit:
+            when = (
+                f"the deadline passed {-limit:.0f} min ago" if limit < 0
+                else f"must leave within {limit:.0f} min"
+            )
             return (
-                f"Too late for any vehicle: must leave within {limit:.0f} min, fastest direct "
-                f"pickup takes {fastest:.0f} min. Escalate to fire command."
+                f"Too late for any vehicle: {when}, fastest direct pickup takes "
+                f"{fastest:.0f} min. Escalate to fire command."
             ), True
         if not any(
             self.option((v.lat, v.lon), v.available_in_min, True, rid) for v in compatible
@@ -314,11 +382,11 @@ def plan_routes_dispatcher(
     t: datetime,
     previous_plan: Plan | None = None,
 ) -> Plan:
-    """Baseline: most urgent first (earliest deadline), nearest breaks ties."""
+    """Rescue bar: earliest deadline, then the nearest vehicle that can carry them safely.
+
+    `previous_plan` is accepted so the signature matches the other planners. The replay locks
+    a vehicle's current leg before it calls this, and does not pass that plan through.
+    """
+    del previous_plan
     planner = _Planner(risks, residents, vehicles, shelters, outlook, travel)
-    no_deadline = HORIZON_MIN + 1
-    return planner.run(
-        lambda o: (o.deadline if o.deadline is not None else no_deadline, o.eta),
-        t,
-        "dispatcher_rule",
-    )
+    return planner.run_dispatcher(t)

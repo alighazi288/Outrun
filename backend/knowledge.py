@@ -8,8 +8,9 @@ against. This module decides which of them the planner can see, and from what ti
              known from the start.
 - call       every other estimated resident becomes known only through a help call:
                  trigger  = the earlier of (a) a real warning/order covering their home is
-                            issued, or (b) the first fire report or satellite detection within
-                            TRIGGER_KM is published
+                            issued, or (b) the first published fire report within TRIGGER_KM.
+                            A satellite detection does not start a call. Detections stay in
+                            the nowcast.
                  call     = trigger + uniform(0, CALL_DELAY_MAX_MIN)
                  known_at = call + HANDLING_DELAY_MIN
              NEVER_CALL of them never call, and stay unknown to every planner.
@@ -65,8 +66,9 @@ def assign_knowledge(
 ) -> Knowledge:
     p = params or KnowledgeParams()
     rng = random.Random(seed)
+    # Detections stay in the nowcast. Ali, Oct 2: a satellite pass does not start a help call.
+    del detections
     evidence = [(r.lat, r.lon, r.visible_from()) for r in reports]
-    evidence += [(d.lat, d.lon, d.visible_from()) for d in detections]
     out = Knowledge(residents=[])
 
     for r in sorted(population, key=lambda r: r.id):
