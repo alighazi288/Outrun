@@ -18,6 +18,7 @@ from backend.clock import parse_t
 from backend.store import DataStore
 from evaluation.arrival_window import (
     build_windows,
+    fire_start_of,
     load_dins,
     summary,
     warning_lead_min,
@@ -28,9 +29,8 @@ from evaluation.arrival_window import (
 
 def main() -> None:
     store = DataStore.from_env()
-    replay = store.meta["replay"]
-    fire_start = parse_t(store.meta.get("fire_start", replay["start"]))
-    night_end = parse_t(replay["end"])
+    fire_start = fire_start_of(store.meta)  # real data must state ignition in meta.json
+    night_end = parse_t(store.meta["replay"]["end"])
     dins_path = store.folder / "dins.geojson"
     dins = load_dins(dins_path)
 

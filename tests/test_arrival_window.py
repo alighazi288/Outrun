@@ -71,6 +71,36 @@ def test_goes_pixels_are_not_truth():
     assert _build([_det(pt("22:00"), *HOME, pixel=2000.0)]) == {}
 
 
+def test_goes_with_default_pixel_is_still_not_truth():
+    """A GOES record that left pixel_m at the 375 m default must not reach a hex or count as
+    a clear pass over the area."""
+    goes = FireDetection(id="g", lat=FAR[0], lon=FAR[1], h3=FAR_H3, observed_at=pt("21:00"),
+                         source="GOES18")
+    assert _build([goes]) == {}
+    w = _build([goes, _det(pt("23:00"), *HOME)])[HOME_H3]
+    assert w.earliest == START, "the GOES scan at 21:00 is not a clear look at HOME"
+
+
+def test_every_source_stays_in_provenance():
+    """A report first, a detection later: both are kept; the time is the report's."""
+    w = _build([_det(pt("23:00"), *HOME)], reports=[_report(pt("22:00"), *HOME)])[HOME_H3]
+    assert w.latest == pt("22:00")
+    assert w.reached_by == ["detection", "report"]
+
+
+def test_real_data_must_state_the_ignition_time():
+    import pytest
+
+    from evaluation.arrival_window import fire_start_of
+
+    replay = {"start": "2025-01-07T18:00:00-08:00", "end": "2025-01-08T06:00:00-08:00"}
+    assert fire_start_of({"synthetic": True, "replay": replay}) == pt("18:00")
+    assert fire_start_of({"synthetic": False, "replay": replay,
+                          "fire_start": "2025-01-07T18:18:00-08:00"}) == pt("18:18")
+    with pytest.raises(ValueError, match="fire_start"):
+        fire_start_of({"name": "eaton", "synthetic": False, "replay": replay})
+
+
 def test_a_coarse_report_cannot_name_one_hex():
     assert _build(reports=[_report(pt("22:00"), *HOME, precision=1000.0)]) == {}
     w = _build(reports=[_report(pt("22:00"), *HOME)])[HOME_H3]

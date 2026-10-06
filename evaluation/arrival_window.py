@@ -90,7 +90,25 @@ def _representative_point(geometry: dict) -> tuple[float, float] | None:
 
 
 def _is_viirs(d: FireDetection) -> bool:
-    return d.pixel_m <= DETECTION_RADIUS_M
+    """Truth needs a 375 m pixel from a VIIRS-class instrument. GOES is never truth, even if a
+    record left `pixel_m` at the schema default."""
+    return d.pixel_m <= DETECTION_RADIUS_M and not d.source.upper().startswith("GOES")
+
+
+def fire_start_of(meta: dict) -> datetime:
+    """When the fire began, from the dataset's `fire_start`. A real dataset must state it: the
+    replay start is a clock setting, not the ignition time. A fake dataset may use its replay
+    start, because its fake fire begins with the replay."""
+    from backend.clock import parse_t
+
+    if "fire_start" in meta:
+        return parse_t(meta["fire_start"])
+    if meta.get("synthetic", True):
+        return parse_t(meta["replay"]["start"])
+    raise ValueError(
+        f"Dataset '{meta.get('name')}' is real and has no fire_start in meta.json. Add the "
+        "ignition time with its source; the replay start is not a lower bound for arrival."
+    )
 
 
 # --------------------------------------------------------------------------------------
@@ -119,13 +137,14 @@ def build_windows(
             if c in cells_set and haversine_m(centre[c], (d.lat, d.lon)) <= DETECTION_RADIUS_M:
                 hit_at[c].add(d.observed_at)
 
-    first_evidence: dict[str, tuple[datetime, set[str]]] = {}
+    # Every source that reached a hex is kept, whichever came first.
+    first_evidence: dict[str, datetime] = {}
+    sources: dict[str, set[str]] = {}
 
     def seen(cell: str, when: datetime, how: str) -> None:
-        if cell not in first_evidence or when < first_evidence[cell][0]:
-            first_evidence[cell] = (when, {how})
-        elif when == first_evidence[cell][0]:
-            first_evidence[cell][1].add(how)
+        sources.setdefault(cell, set()).add(how)
+        if cell not in first_evidence or when < first_evidence[cell]:
+            first_evidence[cell] = when
 
     for c, times in hit_at.items():
         for when in times:
@@ -136,13 +155,10 @@ def build_windows(
 
     windows: dict[str, ArrivalWindow] = {}
     for c in sorted(set(first_evidence) | (dins & cells_set)):
-        reached_by = set()
-        if c in dins:
-            reached_by.add("dins")
+        reached_by = {"dins"} if c in dins else set()
+        reached_by |= sources.get(c, set())
         if c in first_evidence:
-            latest, how = first_evidence[c]
-            reached_by |= how
-            dins_only = False
+            latest, dins_only = first_evidence[c], False
         else:
             latest, dins_only = night_end, True
         latest = max(latest, fire_start)

@@ -31,7 +31,13 @@ from backend.replay import Replay
 from backend.schemas import Resident
 from backend.store import DataStore
 from engines.routing import plan_routes, plan_routes_dispatcher
-from evaluation.arrival_window import ArrivalWindow, Score, build_windows, load_dins
+from evaluation.arrival_window import (
+    ArrivalWindow,
+    Score,
+    build_windows,
+    fire_start_of,
+    load_dins,
+)
 from evaluation.arrival_window import score as score_window
 
 PLANNERS = {"ours": plan_routes, "dispatcher rule": plan_routes_dispatcher}
@@ -39,10 +45,9 @@ PLANNERS = {"ours": plan_routes, "dispatcher rule": plan_routes_dispatcher}
 
 def arrival_windows(store: DataStore) -> dict[str, ArrivalWindow]:
     """The whole night (hindsight), so it's for scoring only, never for planning."""
-    replay = store.meta["replay"]
     return build_windows(
         store.cells, store.detections, store.reports, load_dins(store.folder / "dins.geojson"),
-        parse_t(store.meta.get("fire_start", replay["start"])), parse_t(replay["end"]),
+        fire_start_of(store.meta), parse_t(store.meta["replay"]["end"]),
     )
 
 

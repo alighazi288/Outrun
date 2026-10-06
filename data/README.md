@@ -38,9 +38,15 @@ planner knows about, and from when, is applied when the dataset loads (`backend/
   "description": "Eaton Fire: real reports, satellites, wind, roads, facilities, orders; residents estimated from Census",
   "bbox": {"south": 34.160, "west": -118.180, "north": 34.215, "east": -118.080},
   "h3_res": 9,
-  "replay": {"start": "2025-01-07T18:00:00-08:00", "end": "2025-01-08T06:00:00-08:00", "step_minutes": 10}
+  "replay": {"start": "2025-01-07T18:00:00-08:00", "end": "2025-01-08T06:00:00-08:00", "step_minutes": 10},
+  "fire_start": "2025-01-07T18:18:00-08:00",
+  "fire_start_source": "where the ignition time comes from"
 }
 ```
+
+`fire_start` is required for a real dataset. It is the lower bound of every arrival window
+(`make arrival-window`). The replay start is a clock setting, not the ignition time. A fake dataset
+may leave it out: its fake fire begins with the replay.
 
 Road networks and caches (`.graphml`, `.parquet`) go in the same folder; they're gitignored.
 
