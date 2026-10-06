@@ -51,19 +51,14 @@ def choose_assignment(options: list[DispatchOption]) -> DispatchOption:
     """The single next assignment: most urgent resident, nearest suitable vehicle."""
     if not options:
         raise ValueError("choose_assignment needs at least one feasible option")
+    # One pass over the options: each resident's deadline and nearest suitable vehicle.
     nearest: dict[str, float] = {}
+    deadline: dict[str, float | None] = {}
     for option in options:
-        so_far = nearest.get(option.resident_id, math.inf)
-        if option.travel_min < so_far:
+        deadline[option.resident_id] = option.deadline
+        if option.travel_min < nearest.get(option.resident_id, math.inf):
             nearest[option.resident_id] = option.travel_min
-    resident_id = min(
-        {option.resident_id for option in options},
-        key=lambda rid: _urgency(
-            next(option.deadline for option in options if option.resident_id == rid),
-            nearest[rid],
-            rid,
-        ),
-    )
+    resident_id = min(nearest, key=lambda rid: _urgency(deadline[rid], nearest[rid], rid))
     mine = [option for option in options if option.resident_id == resident_id]
     return min(mine, key=lambda option: (option.travel_min, option.eta, option.vehicle_id))
 
