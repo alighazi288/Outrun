@@ -70,11 +70,13 @@ def nowcast(
     ]
     if not evidence:
         return []
-    latest_e = max(evidence, key=lambda e: e.seen_at)
-    near: tuple[float, float] = (latest_e.lat, latest_e.lon)
+    active = [e for e in evidence if t - e.seen_at <= ACTIVE_WINDOW] or evidence
+    near: tuple[float, float] = (
+        sum(e.lat for e in active) / len(active),
+        sum(e.lon for e in active) / len(active),
+    )
     speed, dir_to = wind_at(wind, t, near)
     head_rate = BACKING_RATE_M_PER_MIN + HEAD_RATE_M_PER_MIN_PER_MS * speed
-    active = [e for e in evidence if t - e.seen_at <= ACTIVE_WINDOW] or evidence
 
     out = []
     for cell in cells:

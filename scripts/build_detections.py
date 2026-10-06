@@ -16,8 +16,8 @@ is applied at load time by backend/store.py.
 Prints row counts and what each filter removed.
 
 Setup:
-    uv sync --extra wx
-    uv run python scripts/build_detections.py
+    uv sync --extra wx --extra geo
+    uv run --with goes2go python scripts/build_detections.py
 """
 
 from __future__ import annotations
@@ -295,6 +295,16 @@ def _near_static_source(lat: float, lon: float) -> bool:
 # ──────────────────────────────────────────────────────────────────────────────
 
 def main() -> None:
+    try:
+        import goes2go  # noqa: F401
+        import pyproj  # noqa: F401
+    except ImportError as exc:
+        raise SystemExit(
+            "GOES needs goes2go and pyproj: "
+            "uv sync --extra wx --extra geo, "
+            "then uv run --with goes2go python scripts/build_detections.py"
+        ) from exc
+
     # ── VIIRS ─────────────────────────────────────────────────────────────────
     if not RAW_CSV.exists():
         print(f"Raw CSV not found at {RAW_CSV}, downloading …")
