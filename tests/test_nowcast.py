@@ -169,3 +169,22 @@ def test_nowcast_uses_centroid_for_wind():
         f"east cell p_3h={east_p3h:.4f}; expected > 0.5 (downwind under centroid wind). "
         "wind_at likely used the single-latest detection instead of the centroid."
     )
+
+
+def test_forecast_wind_is_the_wind_at_the_fire():
+    """The API reports forecast_wind(): the grid point nearest the active fire, the same wind
+    nowcast() spreads the fire with. Not the mean over the area."""
+    import h3 as h3lib
+
+    from backend.schemas import FireDetection
+    from engines.nowcast import forecast_wind
+
+    at_fire = _w(34.19, -118.10, speed=20.0, dir_from=45.0)
+    far_away = _w(34.00, -118.50, speed=3.0, dir_from=225.0)
+    fire = FireDetection(id="f", lat=34.19, lon=-118.10, h3=h3lib.latlng_to_cell(34.19, -118.10, 9),
+                         observed_at=_VALID, available_at=_VALID, source="VIIRS_SNPP")
+
+    speed, dir_to = forecast_wind([fire], [at_fire, far_away], _VALID)
+    assert (speed, dir_to) == (20.0, 225.0)
+    # No fire yet: nothing to be near, so the mean over the area (here the two cancel out).
+    assert forecast_wind([], [at_fire, far_away], _VALID)[0] < 20.0

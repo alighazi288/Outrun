@@ -63,20 +63,11 @@ def nowcast(
 
     Inputs are already filtered to what existed at t (DataStore.at(t)).
     """
-    # Only the centre of each piece of evidence counts as burning. A 2 km GOES pixel or a report
-    # placed to within 1 km says the fire is somewhere in that area, not that all of it burns
-    # (marking whole pixels put 211 of 579 real cells "burning" by 20:00). Spreading that
-    # location uncertainty is the real version's job.
-    evidence = [_Evidence(d.lat, d.lon, d.observed_at, DETECTION_RADIUS_M) for d in detections]
-    evidence += [_Evidence(r.lat, r.lon, r.reported_at, DETECTION_RADIUS_M) for r in reports]
+    evidence = _evidence(detections, reports)
     if not evidence:
         return []
-    active = [e for e in evidence if t - e.seen_at <= ACTIVE_WINDOW] or evidence
-    near: tuple[float, float] = (
-        sum(e.lat for e in active) / len(active),
-        sum(e.lon for e in active) / len(active),
-    )
-    speed, dir_to = wind_at(wind, t, near)
+    active = _active(evidence, t)
+    speed, dir_to = wind_at(wind, t, _centre(active))
     head_rate = BACKING_RATE_M_PER_MIN + HEAD_RATE_M_PER_MIN_PER_MS * speed
 
     out = []
@@ -98,6 +89,39 @@ def nowcast(
             arrival_p10_min=round(p10, 1) if p10 <= HORIZON_MIN else None,
         ))
     return out
+
+
+def _evidence(detections: list[FireDetection], reports: Sequence[FireReport]) -> list[_Evidence]:
+    """Where and when fire was seen. Only the centre of each piece of evidence counts as
+    burning: a 2 km GOES pixel or a report placed to within 1 km says the fire is somewhere in
+    that area, not that all of it burns (marking whole pixels put 211 of 579 real cells
+    "burning" by 20:00). Spreading that location uncertainty is the real version's job."""
+    evidence = [_Evidence(d.lat, d.lon, d.observed_at, DETECTION_RADIUS_M) for d in detections]
+    evidence += [_Evidence(r.lat, r.lon, r.reported_at, DETECTION_RADIUS_M) for r in reports]
+    return evidence
+
+
+def _active(evidence: list[_Evidence], t: datetime) -> list[_Evidence]:
+    """The fire front: evidence from the last ACTIVE_WINDOW (all of it if none is that recent)."""
+    return [e for e in evidence if t - e.seen_at <= ACTIVE_WINDOW] or evidence
+
+
+def _centre(evidence: list[_Evidence]) -> tuple[float, float]:
+    return (sum(e.lat for e in evidence) / len(evidence),
+            sum(e.lon for e in evidence) / len(evidence))
+
+
+def forecast_wind(
+    detections: list[FireDetection], wind: list[WindForecast], t: datetime,
+    reports: Sequence[FireReport] = (),
+) -> tuple[float, float]:
+    """The wind nowcast() uses at t: (speed m/s, direction it blows TOWARD), at the grid point
+    nearest the centre of the active fire. The API reports this, so what the agents tell the
+    manager is the wind behind the forecast. With no fire yet: the mean over all points."""
+    evidence = _evidence(detections, reports)
+    if not evidence:
+        return wind_at(wind, t)
+    return wind_at(wind, t, _centre(_active(evidence, t)))
 
 
 def wind_at(

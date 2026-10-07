@@ -39,7 +39,7 @@ from backend.schemas import (
 )
 from backend.sim import Simulation
 from backend.store import REPO_ROOT, DataStore
-from engines.nowcast import wind_at
+from engines.nowcast import forecast_wind
 
 Geocoder = Callable[[str], "tuple[float, float] | None"]
 
@@ -216,7 +216,8 @@ def create_app(store: DataStore | None = None, log_path: Path | None = None,
                          limit: int = Query(25, ge=1, le=500)) -> OutlookSummary:
         t = at(t)
         step = sim.step(t)
-        speed, dir_to = wind_at(step.snapshot.wind, t)
+        snap = step.snapshot  # the wind the forecast used (at the fire); area mean only before any fire
+        speed, dir_to = forecast_wind(snap.detections, snap.wind, t, snap.reports)
         cells = step.outlook
         return OutlookSummary(
             t=t,
