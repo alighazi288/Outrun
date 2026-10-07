@@ -216,7 +216,8 @@ def create_app(store: DataStore | None = None, log_path: Path | None = None,
                          limit: int = Query(25, ge=1, le=500)) -> OutlookSummary:
         t = at(t)
         step = sim.step(t)
-        snap = step.snapshot  # the wind the forecast used (at the fire); area mean only before any fire
+        snap = step.snapshot
+        # The wind the forecast used (at the fire); the area mean only before any fire.
         speed, dir_to = forecast_wind(snap.detections, snap.wind, t, snap.reports)
         cells = step.outlook
         return OutlookSummary(
