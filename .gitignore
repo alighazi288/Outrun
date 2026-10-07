@@ -26,3 +26,4 @@ dashboard/public/replay/
 .DS_Store
 .idea/
 .vscode/
+*.zip

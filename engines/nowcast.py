@@ -31,6 +31,7 @@ import h3
 
 from backend.assumptions import HORIZON_MIN
 from backend.schemas import FireDetection, FireOutlook, FireReport, WindForecast
+from engines.travel import haversine_m
 
 BACKING_RATE_M_PER_MIN = 3.0  # spread against the wind
 HEAD_RATE_M_PER_MIN_PER_MS = 0.7  # extra head-fire speed per m/s of wind
@@ -70,9 +71,13 @@ def nowcast(
     evidence += [_Evidence(r.lat, r.lon, r.reported_at, DETECTION_RADIUS_M) for r in reports]
     if not evidence:
         return []
-    speed, dir_to = wind_at(wind, t)
-    head_rate = BACKING_RATE_M_PER_MIN + HEAD_RATE_M_PER_MIN_PER_MS * speed
     active = [e for e in evidence if t - e.seen_at <= ACTIVE_WINDOW] or evidence
+    near: tuple[float, float] = (
+        sum(e.lat for e in active) / len(active),
+        sum(e.lon for e in active) / len(active),
+    )
+    speed, dir_to = wind_at(wind, t, near)
+    head_rate = BACKING_RATE_M_PER_MIN + HEAD_RATE_M_PER_MIN_PER_MS * speed
 
     out = []
     for cell in cells:
@@ -95,15 +100,38 @@ def nowcast(
     return out
 
 
-def wind_at(wind: list[WindForecast], t: datetime) -> tuple[float, float]:
+def wind_at(
+    wind: list[WindForecast],
+    t: datetime,
+    near: tuple[float, float] | None = None,
+) -> tuple[float, float]:
     """(speed m/s, direction the wind blows TOWARD in degrees) from the latest forecast
-    issued at or before t, for the valid time closest to t."""
+    issued at or before t, for the valid time closest to t.
+
+    All rows sharing that valid_at are used:
+    - If *near* is given, pick the row geographically nearest to (lat, lon).
+    - If *near* is None, return the vector mean over all rows.
+    """
     if not wind:
         return 0.0, 0.0
     latest_issue = max(w.visible_from() for w in wind)
     run = [w for w in wind if w.visible_from() == latest_issue]
-    w = min(run, key=lambda w: abs((w.valid_at - t).total_seconds()))
-    return w.speed_ms, (w.dir_from_deg + 180) % 360
+    best_valid = min(run, key=lambda w: abs((w.valid_at - t).total_seconds())).valid_at
+    rows = [w for w in run if w.valid_at == best_valid]
+
+    if near is not None:
+        w = min(rows, key=lambda w: haversine_m(near, (w.lat, w.lon)))
+        return w.speed_ms, (w.dir_from_deg + 180) % 360
+
+    # Vector mean: u = -speed*sin(dir_from), v = -speed*cos(dir_from)
+    u = sum(-w.speed_ms * math.sin(math.radians(w.dir_from_deg)) for w in rows) / len(rows)
+    v = sum(-w.speed_ms * math.cos(math.radians(w.dir_from_deg)) for w in rows) / len(rows)
+    speed = math.hypot(u, v)
+    if speed == 0.0:
+        return 0.0, 0.0
+    # dir_from is the direction the vector points FROM (opposite to u,v)
+    dir_from = math.degrees(math.atan2(-u, -v)) % 360
+    return speed, (dir_from + 180) % 360
 
 
 def _arrival_min(

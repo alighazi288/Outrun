@@ -48,6 +48,8 @@ DATASETS = {
     "fixtures": DATA_DIR / "fixtures" / "eaton_fake",
     "eaton": DATA_DIR / "processed" / "eaton",
 }
+# Bounding box for FIRMS/GOES/HRRR downloads and spatial tests (Western Eaton fire area)
+EATON_DOWNLOAD_BOX = {"west": -118.23, "south": 34.12, "east": -118.03, "north": 34.26}
 
 # Files a real dataset may borrow from the fake set while it's being built (people and fleet).
 FILL_FROM_FAKE = ("residents.jsonl", "facilities.jsonl", "vehicles.jsonl", "shelters.jsonl")
