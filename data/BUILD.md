@@ -11,8 +11,8 @@ out of scope.
 |---|---|---|---|---|
 | `detections.jsonl` | Eaton detections and wind | Daniel | NASA FIRMS (VIIRS); NOAA GOES | Set `available_at` to when each detection was published. Check first what GOES saw over west Altadena 22:00–03:25 |
 | `wind.jsonl` | Eaton detections and wind | Daniel | NOAA HRRR via `herbie` | `issued_at` = when the forecast run was available |
-| `fire_reports.jsonl` | (suggested card) | Bhavaani | FSRI and county investigation timelines | Hand-extract time, place, words and citation (with page) into a CSV, then geocode. Set `location_precision_m` honestly: a street is about 250 m, an area about 1 km |
-| `evac_orders.jsonl` | Arrival window | Bhavaani | McChrystal review, news timelines | Real zones and times, one citation per row |
+| `fire_reports.jsonl` | Fire reports file | Bhavaani | FSRI timeline, Citygate tables, McChrystal AAR | `scripts/build_fire_reports.py`. Cited times and places only; Census-geocoded intersections. Precision 250 m (intersection/block), 500 m (named street), 1000 m (canyon/flank). No personal 911 records |
+| `evac_orders.jsonl` | Evacuation orders file | Bhavaani | Citygate Genasys zone times; McChrystal; NBC | `scripts/build_evac_orders.py`. One row per zone; polygons are street boxes split on Lake Avenue (not official Genasys shapefiles) |
 | `dins.geojson` | Arrival window | Bhavaani | CAL FIRE DINS | Scoring only. Never loaded by the replay. Keep the `DAMAGE` column |
 | `arrival_window.jsonl` | Arrival window | Bhavaani | derived: `make arrival-window` | Earliest and latest plausible arrival per reached hex (`evaluation/arrival_window.py`). Rebuild after detections, reports or DINS change |
 | `residents.jsonl` | Synthetic residents | Rachel | Census ACS + Microsoft building footprints | `source: "estimated"`. Who is known when is applied at load by `backend/knowledge.py` |
