@@ -4,7 +4,7 @@
 -include .env
 export
 
-.PHONY: help install test lint fix check api export view eval arrival-window check-data fixtures openapi clean
+.PHONY: help install test lint fix check api export view eval arrival-window check-data fixtures openapi fire-reports evac-orders clean
 
 help:  ## List commands
 	@grep -hE '^[a-z]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-9s %s\n", $$1, $$2}'
@@ -38,6 +38,12 @@ eval:  ## Score our planner vs the dispatcher rule (STAND-IN; ~15 s)
 
 arrival-window:  ## Build arrival_window.jsonl (when fire reached each hex) for OUTRUN_DATASET
 	uv run python scripts/build_arrival_window.py
+
+fire-reports:  ## Build real Eaton fire_reports.jsonl from the published timelines
+	uv run python scripts/build_fire_reports.py
+
+evac-orders:  ## Build real Eaton evac_orders.jsonl (Genasys times, Lake Avenue split)
+	uv run python scripts/build_evac_orders.py
 
 check-data:  ## Check a dataset against the data contract (DATASET=eaton by default)
 	uv run python -m backend.check_data $(or $(DATASET),eaton)
