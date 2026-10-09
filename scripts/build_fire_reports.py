@@ -3,6 +3,8 @@
 Hand-extracted. Each row is one timestamped report of fire that a published
 investigation names (Citygate tables, McChrystal AAR, FSRI timeline via LAT).
 Satellite detections stay in detections.jsonl. Personal 911 recordings are not used.
+A report that only says fire was *visible from* a street is not a fire location
+(FSRI/LAT East Calaveras, 10:50 p.m.): putting it here would mark that hex burning.
 
 Precision (data/BUILD.md): 250 m for a named intersection or hundred-block,
 500 m for a named street with no block, 1000 m for a canyon, flank, or area.
@@ -69,11 +71,6 @@ ROWS: list[tuple[str, str, str, float, str, str]] = [
         "fr_toward_lake", "2025-01-07T22:22:00-08:00", "toward_lake", AREA_M,
         "Radio calls: fire spreading west toward North Lake Avenue.",
         f"{FSRI_VIA_LAT} (from 10:22 p.m. through the next hour)",
-    ),
-    (
-        "fr_calaveras", "2025-01-07T22:50:00-08:00", "calaveras", STREET_ONLY_M,
-        "Resident reported fire visible from East Calaveras Street in west Altadena.",
-        f"{FSRI_VIA_LAT}",
     ),
     (
         "fr_midwick", "2025-01-07T22:50:00-08:00", "midwick_glen_canyon", STREET_M,

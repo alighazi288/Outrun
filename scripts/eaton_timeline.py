@@ -56,7 +56,6 @@ PLACES: dict[str, tuple[float, float, str]] = {
     "west_of_origin": (34.2040, -118.1070, "1 km west of the named Eaton Canyon origin"),
     "toward_lake": (34.204044, -118.1200, "Between origin and N Lake Ave & E Loma Alta Dr"),
     "n_lake_loma_alta": (34.204044, -118.130690, "Census: N Lake Ave & E Loma Alta Dr"),
-    "calaveras": (34.186784, -118.141685, "Census: 400 E Calaveras St, Altadena"),
     "midwick_glen_canyon": (34.182888, -118.106120, "Census: Midwick Dr & Glen Canyon Rd"),
     "mendocino_midlothian": (34.187089, -118.107903, "Census: N Midlothian Dr & E Mendocino St"),
     "morslay_braeburn": (34.187555, -118.113251, "Census: Morslay Rd & Braeburn Rd"),
@@ -88,11 +87,18 @@ def west_of_lake(lon: float) -> bool:
 
 # Reconstructed covering polygons (not official Genasys shapefiles).
 # South edge ~ Washington Blvd / CDP; north ~ foothills; split on Lake Avenue.
+# Earlier polygons must not contain zones ordered later: first_trigger / warned_at
+# take the earliest covering ring, not the matching zone_id.
 _SOUTH, _NORTH = 34.1689, 34.2150
-EAST_ALTADENA = box(LAKE_LON, _SOUTH, BOX["east"], _NORTH)
-WEST_ALTADENA = box(BOX["west"], _SOUTH, LAKE_LON, _NORTH)
+MOUNT_LOWE_EAST = round(LAKE_LON + 0.008, 6)  # ~730 m east of Lake
+MOUNT_LOWE_SOUTH, MOUNT_LOWE_NORTH = 34.1780, 34.2100
 # Immediately east of Lake (Citygate: ALD-MOUNTLOWE, 7:55 p.m. warning / 9:00 p.m. order).
-MOUNT_LOWE = box(LAKE_LON, 34.1780, LAKE_LON + 0.008, 34.2100)
+MOUNT_LOWE = box(LAKE_LON, MOUNT_LOWE_SOUTH, MOUNT_LOWE_EAST, MOUNT_LOWE_NORTH)
+# 6:48 / 7:26 east-of-Lake zones, excluding the Mount Lowe strip.
+EAST_ALTADENA = box(MOUNT_LOWE_EAST, _SOUTH, BOX["east"], _NORTH)
+EAST_LAKE_SOUTH = box(LAKE_LON, _SOUTH, MOUNT_LOWE_EAST, MOUNT_LOWE_SOUTH)
+EAST_LAKE_NORTH = box(LAKE_LON, MOUNT_LOWE_NORTH, MOUNT_LOWE_EAST, _NORTH)
+WEST_ALTADENA = box(BOX["west"], _SOUTH, LAKE_LON, _NORTH)
 KINNELOA = box(-118.1000, 34.1680, BOX["east"], 34.1950)
 # Pasadena zones south of Woodbury, still inside the 1 km study margin.
 PASADENA_NORTH = box(LAKE_LON, BOX["south"], -118.0900, 34.1771)

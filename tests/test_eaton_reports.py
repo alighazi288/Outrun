@@ -7,7 +7,7 @@ from datetime import datetime
 
 from backend.knowledge import _inside, first_trigger
 from backend.schemas import EvacOrder, FireReport, Resident
-from backend.store import REPO_ROOT
+from backend.store import DATASETS, REPO_ROOT, read_jsonl
 
 _SCRIPTS = REPO_ROOT / "scripts"
 
@@ -55,13 +55,15 @@ def test_west_of_lake_is_reported_hours_before_the_west_order():
     first = min(west, key=lambda r: r.reported_at)
     assert first.reported_at < WEST_ORDER
     hours = (WEST_ORDER - first.reported_at).total_seconds() / 3600
-    assert hours >= 4, f"west reports should precede 3:25 a.m. by hours, got {hours:.1f}"
+    assert hours >= 3, f"west reports should precede 3:25 a.m. by hours, got {hours:.1f}"
+    assert first.id == "fr_glenrose"
 
 
 def test_named_west_intersections_are_west_of_lake():
     reports = {r.id: r for r in build_fire_reports.build()}
-    for rid in ("fr_calaveras", "fr_glenrose", "fr_las_flores", "fr_wapello", "fr_monterosa"):
+    for rid in ("fr_glenrose", "fr_las_flores", "fr_wapello", "fr_monterosa"):
         assert reports[rid].lon < LAKE, rid
+    assert "fr_calaveras" not in reports
 
 
 def test_named_east_intersections_are_east_of_lake():
@@ -76,7 +78,7 @@ def test_street_precision_is_not_tighter_than_the_source():
     assert reports["fr_origin"].location_precision_m == 1000.0
     assert reports["fr_west_flank"].location_precision_m == 1000.0
     assert reports["fr_glenrose"].location_precision_m == 250.0
-    assert reports["fr_calaveras"].location_precision_m == 500.0
+    assert reports["fr_upper_lake"].location_precision_m == 500.0
 
 
 def test_no_personal_911_records():
@@ -115,6 +117,37 @@ def test_thirteen_west_orders_at_325():
     }
 
 
+def test_committed_files_match_the_builders():
+    """The replay loads the JSONL files, not build() in memory."""
+    reports = build_fire_reports.build()
+    orders = build_evac_orders.build()
+    on_disk_r = read_jsonl(DATASETS["eaton"] / "fire_reports.jsonl", FireReport)
+    on_disk_o = read_jsonl(DATASETS["eaton"] / "evac_orders.jsonl", EvacOrder)
+    assert [r.model_dump(mode="json") for r in on_disk_r] == [
+        r.model_dump(mode="json") for r in reports
+    ]
+    assert [o.model_dump(mode="json") for o in on_disk_o] == [
+        o.model_dump(mode="json") for o in orders
+    ]
+
+
+def test_mount_lowe_is_not_covered_by_the_earlier_east_orders():
+    """A point in the Mount Lowe strip must keep 19:55 / 21:00, not 18:48 / 19:26."""
+    orders = build_evac_orders.build()
+    lon = LAKE + 0.004
+    lat = 34.194
+    warn = min(
+        o.issued_at for o in orders
+        if o.kind == "warning" and o.polygon and _inside(lon, lat, o.polygon)
+    )
+    order = min(
+        o.issued_at for o in orders
+        if o.kind == "order" and o.polygon and _inside(lon, lat, o.polygon)
+    )
+    assert warn == datetime.fromisoformat("2025-01-07T19:55:00-08:00")
+    assert order == datetime.fromisoformat("2025-01-07T21:00:00-08:00")
+
+
 def test_lake_divide_on_order_polygons():
     orders = build_evac_orders.build()
     east = next(o for o in orders if o.zone_id == "ALD-EASTLOMA" and o.kind == "order")
@@ -141,5 +174,4 @@ def test_a_west_home_is_triggered_by_the_evening_report_not_the_3am_order():
     trigger = first_trigger(person, orders, evidence, trigger_km=2.0)
     assert trigger is not None
     assert trigger < WEST_ORDER
-    # Calaveras (22:50) is within 2 km of Glenrose, so it starts the call, not the 3:25 order.
-    assert trigger == next(r for r in reports if r.id == "fr_calaveras").reported_at
+    assert trigger == glenrose.reported_at

@@ -25,6 +25,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from eaton_timeline import (  # noqa: E402
     CITYGATE_PDF,
     EAST_ALTADENA,
+    EAST_LAKE_NORTH,
+    EAST_LAKE_SOUTH,
     JPL,
     KINNELOA,
     MCCHRYSTAL_PDF,
@@ -61,7 +63,13 @@ _CITE_648 = (
 )
 for z in _EAST_ZONES:
     _add(z, "warning", "2025-01-07T18:48:00-08:00",
-         "Altadena east of Lake Avenue", EAST_ALTADENA, _CITE_648)
+         "Altadena east of Lake Avenue (excluding Mount Lowe)", EAST_ALTADENA, _CITE_648)
+# Pieces of the 6:48 / 7:26 east coverage that sit next to Lake but outside Mount Lowe.
+for poly, label in (
+    (EAST_LAKE_SOUTH, "east of Lake Avenue, south of Mount Lowe"),
+    (EAST_LAKE_NORTH, "east of Lake Avenue, north of Mount Lowe"),
+):
+    _add("ALD-EASTLOMA", "warning", "2025-01-07T18:48:00-08:00", label, poly, _CITE_648)
 _add("KIN-KINNELOA", "warning", "2025-01-07T18:48:00-08:00",
      "Kinneloa Mesa", KINNELOA, _CITE_648)
 for z in _PAS_WARN_648:
@@ -72,7 +80,12 @@ for z in _PAS_WARN_648:
 _CITE_726 = f"{CITYGATE_PDF}, Table 2 / Finding #5; {MCCHRYSTAL_PDF}; {NBC}"
 for z in _EAST_ZONES:
     _add(z, "order", "2025-01-07T19:26:00-08:00",
-         "Altadena east of Lake Avenue", EAST_ALTADENA, _CITE_726)
+         "Altadena east of Lake Avenue (excluding Mount Lowe)", EAST_ALTADENA, _CITE_726)
+for poly, label in (
+    (EAST_LAKE_SOUTH, "east of Lake Avenue, south of Mount Lowe"),
+    (EAST_LAKE_NORTH, "east of Lake Avenue, north of Mount Lowe"),
+):
+    _add("ALD-EASTLOMA", "order", "2025-01-07T19:26:00-08:00", label, poly, _CITE_726)
 _add("KIN-KINNELOA", "order", "2025-01-07T19:26:00-08:00",
      "Kinneloa Mesa", KINNELOA, _CITE_726)
 _add("PAS-019", "order", "2025-01-07T19:26:00-08:00",
@@ -104,12 +117,12 @@ _add("LCF-JPL", "order", "2025-01-08T03:25:00-08:00",
 
 
 def build() -> list[EvacOrder]:
-    seen: set[tuple[str, str, str]] = set()
+    seen: set[tuple[str, str, str, tuple]] = set()
     out: list[EvacOrder] = []
     for zone_id, kind, when, area, polygon, source in ROWS:
-        key = (zone_id, kind, when)
+        key = (zone_id, kind, when, tuple(map(tuple, polygon)))
         if key in seen:
-            raise ValueError(f"duplicate order row {key}")
+            raise ValueError(f"duplicate order row {zone_id} {kind} {when}")
         seen.add(key)
         if polygon[0] != polygon[-1]:
             raise ValueError(f"{zone_id}: polygon must be a closed ring")
