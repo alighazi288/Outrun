@@ -1,9 +1,8 @@
-"""Cited Eaton Fire places, the Lake Avenue divide, and reconstructed order polygons.
+"""Cited Eaton Fire places, the Lake Avenue divide, and the shared citations.
 
-Times, zone ids and wording come from the published investigations. Coordinates are
-US Census geocoder matches for the named street or intersection, rounded to 6 dp.
-Official Genasys shapefiles are not in this repo: order polygons are street-bounded
-boxes from those same named streets (Lake Avenue as the east/west split the reports use).
+Times and wording come from the published investigations. Coordinates are US Census
+geocoder matches for the named street or intersection, rounded to 6 dp. Evacuation alert
+areas are not drawn here: build_evac_orders.py takes them from the real alerts.
 
 Not loaded here: real 911 recordings, resident names, or house numbers that only
 appear in redacted dispatch logs.
@@ -14,9 +13,6 @@ from __future__ import annotations
 # Lake Avenue at Altadena Drive (Census: 2260 N Lake Ave). Every "west of Lake" /
 # "east of Lake" test uses this longitude.
 LAKE_LON = -118.131466
-
-# Study-area box from data/processed/eaton/meta.json (Altadena CDP + 1 km).
-BOX = {"south": 34.1585, "west": -118.1826, "north": 34.2264, "east": -118.0841}
 
 # How precisely a published record locates fire (data/BUILD.md).
 STREET_M = 250.0   # a named intersection or hundred-block
@@ -41,6 +37,11 @@ FSRI_VIA_LAT = (
     f"{FSRI_REPORT}; locations named in Los Angeles Times, 20 Nov 2025, "
     "https://www.latimes.com/california/story/2025-11-20/state-report-alarms-eaton-fire-evacuations"
 )
+LA_COUNTY_START = (
+    "LA County, Eaton_Start_Location ('Location where the Eaton Fire Started'), "
+    "https://services.arcgis.com/RmCCgQtiZLDCtblq/ArcGIS/rest/services/Eaton_Start_Location/"
+    "FeatureServer/34"
+)
 NBC = (
     "NBC News, 22 Jan 2025, "
     "https://www.nbcnews.com/news/us-news/eaton-fire-deaths-los-angeles-evacuation-orders-took-hours-rcna188729"
@@ -49,12 +50,10 @@ NBC = (
 # Place key -> (lat, lon, how we got it). Intersections: Census onelineaddress.
 PLACES: dict[str, tuple[float, float, str]] = {
     # Canyon origin is named, not a street. Precision is AREA_M wherever this is used.
-    "eaton_canyon": (34.2040, -118.0960, "Eaton Canyon north of Altadena (investigations)"),
+    "eaton_canyon": (34.185961, -118.093668, "LA County Eaton Fire start location"),
     "altadena_dr_east": (34.176522, -118.098541, "Census: 1750 N Altadena Dr, Pasadena"),
     "kinneloa": (34.178904, -118.088622, "Census: 2000 Kinneloa Canyon Rd, Pasadena"),
     "hospital": (34.169086, -118.097360, "Census: 2580 E Washington Blvd, Pasadena"),
-    "west_of_origin": (34.2040, -118.1070, "1 km west of the named Eaton Canyon origin"),
-    "toward_lake": (34.204044, -118.1200, "Between origin and N Lake Ave & E Loma Alta Dr"),
     "n_lake_loma_alta": (34.204044, -118.130690, "Census: N Lake Ave & E Loma Alta Dr"),
     "midwick_glen_canyon": (34.182888, -118.106120, "Census: Midwick Dr & Glen Canyon Rd"),
     "mendocino_midlothian": (34.187089, -118.107903, "Census: N Midlothian Dr & E Mendocino St"),
@@ -74,33 +73,5 @@ PLACES: dict[str, tuple[float, float, str]] = {
 }
 
 
-def box(west: float, south: float, east: float, north: float) -> list[list[float]]:
-    """Closed GeoJSON ring, [lon, lat] pairs."""
-    return [
-        [west, south], [east, south], [east, north], [west, north], [west, south],
-    ]
-
-
 def west_of_lake(lon: float) -> bool:
     return lon < LAKE_LON
-
-
-# Reconstructed covering polygons (not official Genasys shapefiles).
-# South edge ~ Washington Blvd / CDP; north ~ foothills; split on Lake Avenue.
-# Earlier polygons must not contain zones ordered later: first_trigger / warned_at
-# take the earliest covering ring, not the matching zone_id.
-_SOUTH, _NORTH = 34.1689, 34.2150
-MOUNT_LOWE_EAST = round(LAKE_LON + 0.008, 6)  # ~730 m east of Lake
-MOUNT_LOWE_SOUTH, MOUNT_LOWE_NORTH = 34.1780, 34.2100
-# Immediately east of Lake (Citygate: ALD-MOUNTLOWE, 7:55 p.m. warning / 9:00 p.m. order).
-MOUNT_LOWE = box(LAKE_LON, MOUNT_LOWE_SOUTH, MOUNT_LOWE_EAST, MOUNT_LOWE_NORTH)
-# 6:48 / 7:26 east-of-Lake zones, excluding the Mount Lowe strip.
-EAST_ALTADENA = box(MOUNT_LOWE_EAST, _SOUTH, BOX["east"], _NORTH)
-EAST_LAKE_SOUTH = box(LAKE_LON, _SOUTH, MOUNT_LOWE_EAST, MOUNT_LOWE_SOUTH)
-EAST_LAKE_NORTH = box(LAKE_LON, MOUNT_LOWE_NORTH, MOUNT_LOWE_EAST, _NORTH)
-WEST_ALTADENA = box(BOX["west"], _SOUTH, LAKE_LON, _NORTH)
-KINNELOA = box(-118.1000, 34.1680, BOX["east"], 34.1950)
-# Pasadena zones south of Woodbury, still inside the 1 km study margin.
-PASADENA_NORTH = box(LAKE_LON, BOX["south"], -118.0900, 34.1771)
-# JPL / La Cañada, issued with the 3:25 a.m. west-Altadena batch.
-JPL = box(BOX["west"], 34.1900, -118.1650, 34.2150)

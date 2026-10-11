@@ -305,10 +305,11 @@ class WindForecast(Model):
 
 
 class EvacOrder(Model):
-    """A real evacuation warning or order, hand-mapped from after-action reviews."""
+    """A real evacuation alert, hand-mapped from after-action reviews. Advisory ("be aware")
+    comes before warning ("get ready"), which comes before order ("leave now")."""
 
     zone_id: str
-    kind: Literal["warning", "order"]
+    kind: Literal["advisory", "warning", "order"]
     issued_at: AwareDatetime
     area: str = Field(description="Human-readable area name")
     polygon: list[list[float]] | None = Field(

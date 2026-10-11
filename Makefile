@@ -42,7 +42,7 @@ arrival-window:  ## Build arrival_window.jsonl (when fire reached each hex) for 
 fire-reports:  ## Build real Eaton fire_reports.jsonl from the published timelines
 	uv run python scripts/build_fire_reports.py
 
-evac-orders:  ## Build real Eaton evac_orders.jsonl (Genasys times, Lake Avenue split)
+evac-orders:  ## Build real Eaton evac_orders.jsonl from the real alerts (LA County IPAWS layer)
 	uv run python scripts/build_evac_orders.py
 
 check-data:  ## Check a dataset against the data contract (DATASET=eaton by default)

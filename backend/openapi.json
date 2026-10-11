@@ -703,6 +703,7 @@
           "kind": {
             "type": "string",
             "enum": [
+              "advisory",
               "warning",
               "order"
             ],
@@ -752,7 +753,7 @@
           "source"
         ],
         "title": "EvacOrder",
-        "description": "A real evacuation warning or order, hand-mapped from after-action reviews."
+        "description": "A real evacuation alert, hand-mapped from after-action reviews. Advisory (\"be aware\")\ncomes before warning (\"get ready\"), which comes before order (\"leave now\")."
       },
       "Facility": {
         "properties": {

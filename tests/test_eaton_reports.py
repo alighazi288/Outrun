@@ -1,9 +1,11 @@
-"""Real Eaton fire reports and evacuation orders: cited facts, honest precision."""
+"""Real Eaton fire reports and evacuation alerts: cited facts, honest precision."""
 
 from __future__ import annotations
 
 import importlib.util
 from datetime import datetime
+
+import pytest
 
 from backend.knowledge import _inside, first_trigger
 from backend.schemas import EvacOrder, FireReport, Resident
@@ -27,7 +29,7 @@ LAKE = timeline.LAKE_LON
 ORIGIN = datetime.fromisoformat("2025-01-07T18:18:00-08:00")
 WEST_ORDER = datetime.fromisoformat("2025-01-08T03:25:00-08:00")
 EAST_ORDER = datetime.fromisoformat("2025-01-07T19:26:00-08:00")
-EAST_WARN = datetime.fromisoformat("2025-01-07T18:48:00-08:00")
+EAST_ADVISORY = datetime.fromisoformat("2025-01-07T18:49:00-08:00")  # Citygate: ~6:48
 
 
 def test_reports_validate_and_are_unique():
@@ -66,6 +68,15 @@ def test_named_west_intersections_are_west_of_lake():
     assert "fr_calaveras" not in reports
 
 
+def test_a_direction_is_not_a_place():
+    """'Spreading west toward Lake' says where the fire was heading, not where it was.
+    Placing it ourselves put fire west of every named location an hour later."""
+    reports = {r.id: r for r in build_fire_reports.build()}
+    for rid in ("fr_west_of_origin", "fr_toward_lake", "fr_west_flank"):
+        assert rid not in reports
+    assert "toward_lake" not in timeline.PLACES and "west_of_origin" not in timeline.PLACES
+
+
 def test_named_east_intersections_are_east_of_lake():
     reports = {r.id: r for r in build_fire_reports.build()}
     for rid in ("fr_midwick", "fr_mendocino", "fr_morslay"):
@@ -76,7 +87,6 @@ def test_street_precision_is_not_tighter_than_the_source():
     """An area report cannot name one hex (EVAL_SPEC: precision > 500 m)."""
     reports = {r.id: r for r in build_fire_reports.build()}
     assert reports["fr_origin"].location_precision_m == 1000.0
-    assert reports["fr_west_flank"].location_precision_m == 1000.0
     assert reports["fr_glenrose"].location_precision_m == 250.0
     assert reports["fr_upper_lake"].location_precision_m == 500.0
 
@@ -87,83 +97,84 @@ def test_no_personal_911_records():
     assert "mitchell" not in text
 
 
+def _orders() -> list[EvacOrder]:
+    """The committed file: built from the real alerts, which CI can't download."""
+    return read_jsonl(DATASETS["eaton"] / "evac_orders.jsonl", EvacOrder)
+
+
+def _alerts_at(lat: float, lon: float) -> list[tuple[datetime, str]]:
+    return sorted((o.issued_at, o.kind) for o in _orders() if _inside(lon, lat, o.polygon))
+
+
 def test_orders_validate_and_polygons_close():
-    orders = build_evac_orders.build()
+    orders = _orders()
     assert orders
     for o in orders:
-        EvacOrder.model_validate(o.model_dump())
-        assert o.source
+        assert o.source.startswith("LA County, IPAWS")
         assert o.polygon and o.polygon[0] == o.polygon[-1]
-        assert all(len(p) == 2 for p in o.polygon)
 
 
-def test_east_warning_then_order_then_west_order():
-    orders = build_evac_orders.build()
-    times = {(o.zone_id, o.kind): o.issued_at for o in orders}
-    assert times["ALD-EASTLOMA", "warning"] == EAST_WARN
-    assert times["ALD-EASTLOMA", "order"] == EAST_ORDER
-    assert times["ALD-WAPELLO", "order"] == WEST_ORDER
-    assert ("ALD-WAPELLO", "warning") not in times  # investigations: no west warning
-
-
-def test_thirteen_west_orders_at_325():
-    west = [
-        o for o in build_evac_orders.build()
-        if o.kind == "order" and o.issued_at == WEST_ORDER
-    ]
-    assert len(west) == 13
-    assert {o.zone_id for o in west} >= {
-        "ALD-WAPELLO", "ALD-FARNSWORTH", "ALD-CHANEY", "LCF-JPL",
+def test_alert_times_and_kinds_match_citygate():
+    """The layer's send times, read as Pacific clock time, land on Citygate's minutes."""
+    got = {(o.issued_at.strftime("%m-%d %H:%M"), o.kind) for o in _orders()}
+    assert got >= {
+        ("01-07 18:49", "advisory"), ("01-07 19:26", "order"), ("01-07 19:55", "warning"),
+        ("01-07 21:00", "order"), ("01-08 03:25", "order"),
     }
+    assert not [o for o in _orders() if o.kind == "warning" and o.issued_at < EAST_ORDER]
+
+
+def test_east_of_lake_advised_then_ordered():
+    midwick = (34.182888, -118.106120)
+    assert _alerts_at(*midwick)[:2] == [(EAST_ADVISORY, "advisory"), (EAST_ORDER, "order")]
+
+
+def test_mount_lowe_warned_at_755_and_ordered_at_9():
+    """The strip just east of Lake was left out of the 6:48 and 7:26 alerts."""
+    assert _alerts_at(34.194, LAKE + 0.004) == [
+        (datetime.fromisoformat("2025-01-07T19:55:00-08:00"), "warning"),
+        (datetime.fromisoformat("2025-01-07T21:00:00-08:00"), "order"),
+    ]
+
+
+def test_west_of_lake_ordered_at_325_without_a_warning():
+    glenrose = (34.202771, -118.147337)
+    assert _alerts_at(*glenrose) == [(WEST_ORDER, "order")]
+
+
+def test_south_west_altadena_was_ordered_after_5am_not_at_325():
+    """What the drawn boxes got wrong: the 3:25 a.m. order stopped north of here."""
+    alerts = _alerts_at(34.175, -118.145)
+    assert alerts and alerts[0][1] == "order"
+    assert alerts[0][0] > datetime.fromisoformat("2025-01-08T05:00:00-08:00")
 
 
 def test_committed_files_match_the_builders():
     """The replay loads the JSONL files, not build() in memory."""
     reports = build_fire_reports.build()
-    orders = build_evac_orders.build()
     on_disk_r = read_jsonl(DATASETS["eaton"] / "fire_reports.jsonl", FireReport)
-    on_disk_o = read_jsonl(DATASETS["eaton"] / "evac_orders.jsonl", EvacOrder)
     assert [r.model_dump(mode="json") for r in on_disk_r] == [
         r.model_dump(mode="json") for r in reports
     ]
-    assert [o.model_dump(mode="json") for o in on_disk_o] == [
-        o.model_dump(mode="json") for o in orders
+    if not build_evac_orders.RAW.exists():
+        pytest.skip("alerts not downloaded (make evac-orders)")
+    assert [o.model_dump(mode="json") for o in _orders()] == [
+        o.model_dump(mode="json") for o in build_evac_orders.build()
     ]
 
 
-def test_mount_lowe_is_not_covered_by_the_earlier_east_orders():
-    """A point in the Mount Lowe strip must keep 19:55 / 21:00, not 18:48 / 19:26."""
-    orders = build_evac_orders.build()
-    lon = LAKE + 0.004
-    lat = 34.194
-    warn = min(
-        o.issued_at for o in orders
-        if o.kind == "warning" and o.polygon and _inside(lon, lat, o.polygon)
-    )
-    order = min(
-        o.issued_at for o in orders
-        if o.kind == "order" and o.polygon and _inside(lon, lat, o.polygon)
-    )
-    assert warn == datetime.fromisoformat("2025-01-07T19:55:00-08:00")
-    assert order == datetime.fromisoformat("2025-01-07T21:00:00-08:00")
-
-
-def test_lake_divide_on_order_polygons():
-    orders = build_evac_orders.build()
-    east = next(o for o in orders if o.zone_id == "ALD-EASTLOMA" and o.kind == "order")
-    west = next(o for o in orders if o.zone_id == "ALD-WAPELLO" and o.kind == "order")
-    midwick = (34.182888, -118.106120)  # east of Lake
-    glenrose = (34.202771, -118.147337)  # west of Lake
-    assert _inside(midwick[1], midwick[0], east.polygon)
-    assert not _inside(midwick[1], midwick[0], west.polygon)
-    assert _inside(glenrose[1], glenrose[0], west.polygon)
-    assert not _inside(glenrose[1], glenrose[0], east.polygon)
+def test_alert_kind_comes_from_the_words():
+    kind = build_evac_orders.kind_of
+    assert kind("Fast moving wildfire. BE AWARE and MONITOR.") == "advisory"
+    assert kind("AN EVACUATION WARNING HAS BEEN ISSUED.") == "warning"
+    assert kind("EVACUATION ORDER. LEAVE NOW.") == "order"
+    with pytest.raises(ValueError):
+        kind("Shelter in place.")
 
 
 def test_a_west_home_is_triggered_by_the_evening_report_not_the_3am_order():
-    """Call trigger uses the earlier of covering order or nearby report (knowledge.py)."""
+    """Call trigger uses the earlier of covering alert or nearby report (knowledge.py)."""
     reports = build_fire_reports.build()
-    orders = build_evac_orders.build()
     glenrose = next(r for r in reports if r.id == "fr_glenrose")
     person = Resident(
         id="r_test", lat=glenrose.lat, lon=glenrose.lon, h3=glenrose.h3,
@@ -171,7 +182,7 @@ def test_a_west_home_is_triggered_by_the_evening_report_not_the_3am_order():
         load_minutes=3, source="estimated",
     )
     evidence = [(r.lat, r.lon, r.reported_at) for r in reports]
-    trigger = first_trigger(person, orders, evidence, trigger_km=2.0)
+    trigger = first_trigger(person, _orders(), evidence, trigger_km=2.0)
     assert trigger is not None
     assert trigger < WEST_ORDER
     assert trigger == glenrose.reported_at

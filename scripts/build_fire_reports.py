@@ -5,6 +5,10 @@ investigation names (Citygate tables, McChrystal AAR, FSRI timeline via LAT).
 Satellite detections stay in detections.jsonl. Personal 911 recordings are not used.
 A report that only says fire was *visible from* a street is not a fire location
 (FSRI/LAT East Calaveras, 10:50 p.m.): putting it here would mark that hex burning.
+Neither is one that only says which way the fire was heading ("spreading west toward Lake
+Avenue", "spot fires west of the origin", "reports on the western flank"): any point we
+picked would be ours, not the source's. Citygate: by midnight the fire front had not yet
+reached the inhabited areas of Altadena.
 
 Precision (data/BUILD.md): 250 m for a named intersection or hundred-block,
 500 m for a named street with no block, 1000 m for a canyon, flank, or area.
@@ -28,6 +32,7 @@ from eaton_timeline import (  # noqa: E402
     AREA_M,
     CITYGATE_PDF,
     FSRI_VIA_LAT,
+    LA_COUNTY_START,
     MCCHRYSTAL_PDF,
     PLACES,
     STREET_M,
@@ -43,7 +48,7 @@ ROWS: list[tuple[str, str, str, float, str, str]] = [
         "fr_origin", "2025-01-07T18:18:00-08:00", "eaton_canyon", AREA_M,
         "Eaton Fire reported in Eaton Canyon.",
         f"{MCCHRYSTAL_PDF}, timeline (matches meta.json fire_start); "
-        f"{CITYGATE_PDF}, §1.2 (~6:15 p.m.)",
+        f"{CITYGATE_PDF}, §1.2 (~6:15 p.m.); location: {LA_COUNTY_START}",
     ),
     (
         "fr_altadena_dr_spots", "2025-01-07T18:54:00-08:00", "altadena_dr_east", AREA_M,
@@ -63,16 +68,6 @@ ROWS: list[tuple[str, str, str, float, str, str]] = [
         f"{CITYGATE_PDF}, Table 2 (8:40–9:09 p.m.)",
     ),
     (
-        "fr_west_of_origin", "2025-01-07T21:30:00-08:00", "west_of_origin", AREA_M,
-        "Fire spread to the west; several spot fires west of the origin.",
-        f"{FSRI_VIA_LAT} (as early as 9:30 p.m.); {CITYGATE_PDF}, §2.1 n.13 cites FSRI p.173",
-    ),
-    (
-        "fr_toward_lake", "2025-01-07T22:22:00-08:00", "toward_lake", AREA_M,
-        "Radio calls: fire spreading west toward North Lake Avenue.",
-        f"{FSRI_VIA_LAT} (from 10:22 p.m. through the next hour)",
-    ),
-    (
         "fr_midwick", "2025-01-07T22:50:00-08:00", "midwick_glen_canyon", STREET_M,
         "Multiple houses and vegetation on fire around Midwick Drive and Glen Canyon Road, "
         "about 3/4 mile east of Lake Avenue.",
@@ -83,13 +78,6 @@ ROWS: list[tuple[str, str, str, float, str, str]] = [
         "LACoSD: two structures on fire on East Mendocino Lane and North Midlothian Drive "
         "(east of Lake Avenue).",
         f"{CITYGATE_PDF}, Table 4",
-    ),
-    (
-        "fr_west_flank", "2025-01-07T23:18:00-08:00", "toward_lake", AREA_M,
-        "At least 10 fire reports on the western flank between 11:18 p.m. and 12:17 a.m., "
-        "showing the advance toward Lake Avenue. One row for the window; individual "
-        "unnamed calls are not invented.",
-        f"{FSRI_VIA_LAT}",
     ),
     (
         "fr_morslay", "2025-01-07T23:20:00-08:00", "morslay_braeburn", STREET_M,
