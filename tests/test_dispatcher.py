@@ -210,3 +210,15 @@ def test_eval_entry_point_matches_the_engine():
     risks = [_risk("a", 60)]
     args = (risks, [person], [van], [_shelter()], [], TRAVEL, T)
     assert eval_dispatcher(*args) == engine_dispatcher(*args)
+
+
+def test_no_shelter_open_yet_is_not_sent_to_fire_command():
+    """Real shelters open during the night (Pasadena's at 20:00). Before that nobody can be
+    routed, and the reason must say so, not "only reachable through danger"."""
+    person = _resident("r_1", 34.17, -118.13)
+    van = _vehicle("van", 34.16, -118.13)
+    for planner in (plan_routes, engine_dispatcher):
+        plan = planner([_risk("r_1", 60)], [person], [van], [], [], TRAVEL, T)
+        assert plan.unreachable == ["r_1"]
+        assert plan.reasons["r_1"].startswith("No shelter is open yet")
+        assert plan.escalated_fire_command == []

@@ -347,6 +347,8 @@ class _Planner:
                 f"Too late for any vehicle: {when}, fastest direct pickup takes "
                 f"{fastest:.0f} min. Escalate to fire command."
             ), True
+        if not self.shelters:
+            return "No shelter is open yet, so there is nowhere to take them.", False
         if not any(
             self.option((v.lat, v.lon), v.available_in_min, True, rid) for v in compatible
         ):
