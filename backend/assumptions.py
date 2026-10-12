@@ -60,6 +60,24 @@ STUB_SPEED_KMH = 30.0  # straight-line stub only: 0.5 x a 60 km/h road
 DETOUR_FACTOR = 1.3  # straight-line stub only: roads are longer than straight lines
 UNLOAD_MIN = 5.0  # time to unload at a shelter
 
+# --- Who needs a ride (scripts/build_residents.py) -------------------------------------------
+# Counts come from Census ACS 2019-2023 per tract; these shares turn them into needs.
+
+# Wheelchair users per person with difficulty walking: 3.6 M used a wheelchair, 30.6 M had
+# difficulty walking or climbing stairs (Census, Americans With Disabilities: 2010, P70-131).
+WHEELCHAIR_SHARE_OF_AMBULATORY = 0.12
+# Completely homebound, per person 65+: 1.0% (Ornstein et al. 2015, JAMA Intern Med).
+BEDBOUND_SHARE_65 = 0.01
+# Home oxygen users per person 65+: ~1.5 M adults use it, mostly 65+ (ATS guideline 2020).
+OXYGEN_SHARE_65 = 0.02
+# Care homes: share of licensed places filled, and what residents need, by facility group.
+FACILITY_OCCUPANCY = 0.85
+FACILITY_NEEDS = {
+    "nursing": {"bedbound": 0.35, "wheelchair": 0.45, "oxygen": 0.10, "no_car": 0.10},
+    "residential": {"bedbound": 0.05, "wheelchair": 0.30, "oxygen": 0.05, "no_car": 0.60},
+}
+MIN_HOME_SQFT = 400.0  # smaller county building outlines are sheds and garages, not homes
+
 # --- Who is known, and when (evaluation only) -----------------------------------------------
 
 FRACTION_KNOWN = 0.25  # share of estimated residents on a list before the fire
@@ -78,7 +96,9 @@ HRRR_PUBLISH_LAG_MIN = 60.0  # HRRR model run time -> forecast available
 
 # --- Response (evaluation only) -------------------------------------------------------------
 
-FLEET_BASELINE = {"wheelchair_van": 4, "ambulance": 4, "bus": 2}
+# Buses: the 11 Pasadena Transit sent that night (scripts/build_vehicles.py). Vans and
+# ambulances: no source gives how many were free, so the evaluation spec's baseline.
+FLEET_BASELINE = {"wheelchair_van": 4, "ambulance": 4, "bus": 11}
 APPROVAL_DELAY_MIN = 5.0  # plan made at t takes effect at t + this
 ROAD_BLOCKAGE = 0.0  # share of road segments blocked (downed lines, debris)
 
@@ -104,8 +124,21 @@ REGISTER: list[Assumption] = [
                "PLACEHOLDER", "30, 60", ""),
     Assumption("Call handling delay", HANDLING_DELAY_MIN, "min", "PLACEHOLDER", "5, 15, 30", ""),
     Assumption("Call trigger distance", TRIGGER_KM, "km", "PLACEHOLDER", "1, 2, 3", ""),
+    Assumption("Wheelchair users per walking difficulty", WHEELCHAIR_SHARE_OF_AMBULATORY, "",
+               "SOURCED", "0.06, 0.12, 0.25", "Census P70-131 (2010): 3.6 M / 30.6 M."),
+    Assumption("Bedbound per person 65+", BEDBOUND_SHARE_65, "", "SOURCED", "0.005, 0.01, 0.05",
+               "Completely homebound (Ornstein 2015); 0.05 adds the mostly homebound."),
+    Assumption("Home oxygen per person 65+", OXYGEN_SHARE_65, "", "PLACEHOLDER",
+               "0.01, 0.02, 0.03", "~1.5 M US adults on home oxygen (ATS 2020); verify share."),
+    Assumption("Care home occupancy", FACILITY_OCCUPANCY, "share of licensed places",
+               "PLACEHOLDER", "0.7, 0.85, 1.0", "Senior housing ran ~85-87% full in 2024."),
+    Assumption("Care home needs mix", FACILITY_NEEDS, "", "PLACEHOLDER", "",
+               "Needs outside review (care-home staff or state data)."),
+    Assumption("Smallest home", MIN_HOME_SQFT, "sq ft", "PLACEHOLDER", "200, 400, 800",
+               "Drops sheds and garages from the county outlines."),
     Assumption("Fleet", FLEET_BASELINE, "vehicles", "PLACEHOLDER", "2, 5, 10, 20, 40, 80",
-               "Source candidates: county reviews (Pasadena transit buses), paratransit fleets."),
+               "Buses SOURCED: 11 Pasadena Transit buses that night (LAist, CBS). Vans and "
+               "ambulances: placeholder counts; Pasadena Dial-A-Ride has 13 vans in all."),
     Assumption("Approval delay", APPROVAL_DELAY_MIN, "min", "PLACEHOLDER", "0, 5, 10, 20",
                "Ask an emergency manager."),
     Assumption("Road blockage", ROAD_BLOCKAGE, "share of segments", "PLACEHOLDER",

@@ -15,10 +15,10 @@ out of scope.
 | `evac_orders.jsonl` | Evacuation orders file | Bhavaani | LA County IPAWS alert layer; Citygate zone names | `scripts/build_evac_orders.py` (downloads the alerts). One row per real alert (advisory, warning, order) with the area it was sent to |
 | `dins.geojson` | Arrival window | Bhavaani | CAL FIRE DINS | Scoring only. Never loaded by the replay. Keep the `DAMAGE` column |
 | `arrival_window.jsonl` | Arrival window | Bhavaani | derived: `make arrival-window` | Earliest and latest plausible arrival per reached hex (`evaluation/arrival_window.py`). Rebuild after detections, reports or DINS change |
-| `residents.jsonl` | Synthetic residents | Rachel | Census ACS + Microsoft building footprints | `source: "estimated"`. Who is known when is applied at load by `backend/knowledge.py` |
+| `residents.jsonl` | Synthetic residents | Ali | Census ACS 2019-2023 (tracts) + LA County 2020 building outlines + `facilities.jsonl` | `scripts/build_residents.py`. `source: "estimated"` or `"facility"`. Need shares in `backend/assumptions.py`. Who is known when is applied at load by `backend/knowledge.py` |
 | `facilities.jsonl` (+ facility residents) | Synthetic residents | Rachel | CA Community Care Licensing | Licensed capacity; a needs mix per facility type |
 | `roads.graphml` | Roads and a first route map | Rachel | OpenStreetMap via `osmnx` | Too big for git |
-| `vehicles.jsonl`, `shelters.jsonl` | Roads and a first route map | Rachel | `backend/assumptions.py`; real shelter locations from news | Cite the shelters |
+| `vehicles.jsonl`, `shelters.jsonl` | Shelters and vehicles | Ali | Pasadena Transit (11 buses, yard, Dial-A-Ride vans); Pasadena timeline and CAL FIRE for shelters | `scripts/build_vehicles.py`, `scripts/build_shelters.py`. Van and ambulance counts are assumptions |
 | `meta.json` | Replay clock API | Ali | | `"synthetic": false`; study area = Altadena boundary + 1 km |
 
 Scripts go in `scripts/` (e.g. `scripts/build_detections.py`) and write to `data/processed/eaton/`.
