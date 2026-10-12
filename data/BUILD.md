@@ -13,11 +13,11 @@ out of scope.
 | `wind.jsonl` | Eaton detections and wind | Daniel | NOAA HRRR via `herbie` | `issued_at` = when the forecast run was available |
 | `fire_reports.jsonl` | Fire reports file | Bhavaani | FSRI timeline, Citygate tables, McChrystal AAR | `scripts/build_fire_reports.py`. Cited times and places only (a direction like "toward Lake" is not a place); Census-geocoded intersections. Precision 250 m (intersection/block), 500 m (named street), 1000 m (canyon/flank). No personal 911 records |
 | `evac_orders.jsonl` | Evacuation orders file | Bhavaani | LA County IPAWS alert layer; Citygate zone names | `scripts/build_evac_orders.py` (downloads the alerts). One row per real alert (advisory, warning, order) with the area it was sent to |
-| `dins.geojson` | Arrival window | Bhavaani | CAL FIRE DINS | Scoring only. Never loaded by the replay. Keep the `DAMAGE` column |
+| `dins.geojson` | Arrival window | Ali | CAL FIRE DINS | `scripts/build_dins.py`. Scoring only. Never loaded by the replay. Keeps `DAMAGE` and `STRUCTURETYPE` |
 | `arrival_window.jsonl` | Arrival window | Bhavaani | derived: `make arrival-window` | Earliest and latest plausible arrival per reached hex (`evaluation/arrival_window.py`). Rebuild after detections, reports or DINS change |
 | `residents.jsonl` | Synthetic residents | Ali | Census ACS 2019-2023 (tracts) + LA County 2020 building outlines + `facilities.jsonl` | `scripts/build_residents.py`. `source: "estimated"` or `"facility"`. Need shares in `backend/assumptions.py`. Who is known when is applied at load by `backend/knowledge.py` |
 | `facilities.jsonl` (+ facility residents) | Synthetic residents | Rachel | CA Community Care Licensing | Licensed capacity; a needs mix per facility type |
-| `roads.graphml` | Roads and a first route map | Rachel | OpenStreetMap via `osmnx` | Too big for git |
+| `roads.json.gz` | Real road travel times | Ali | OpenStreetMap via `osmnx` | `make roads`. Minutes and routes between every pair of study cells (plus shelters and the yard); the raw graph stays in `data/raw/` |
 | `vehicles.jsonl`, `shelters.jsonl` | Shelters and vehicles | Ali | Pasadena Transit (11 buses, yard, Dial-A-Ride vans); Pasadena timeline and CAL FIRE for shelters | `scripts/build_vehicles.py`, `scripts/build_shelters.py`. Van and ambulance counts are assumptions |
 | `meta.json` | Replay clock API | Ali | | `"synthetic": false`; study area = Altadena boundary + 1 km |
 

@@ -35,7 +35,7 @@ from backend.schemas import (
     WorldState,
 )
 from backend.store import DataStore, Snapshot
-from engines import StraightLineTravel, TravelTime, nowcast, plan_routes, prioritize
+from engines import TravelTime, nowcast, plan_routes, prioritize, travel_for
 
 LatLon = tuple[float, float]
 
@@ -100,7 +100,7 @@ class Replay:
     ):
         self.store = store
         self.planner = planner
-        self.travel = travel or StraightLineTravel()
+        self.travel = travel or travel_for(store.folder)  # real roads when the dataset has them
         self.delay = timedelta(minutes=approval_delay_min)
         self.clock = store.make_clock()
         self.invalidate()

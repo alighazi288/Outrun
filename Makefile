@@ -4,7 +4,7 @@
 -include .env
 export
 
-.PHONY: help install test lint fix check api export view eval arrival-window check-data fixtures openapi fire-reports evac-orders clean
+.PHONY: help install test lint fix check api export view eval arrival-window check-data fixtures openapi fire-reports evac-orders roads dins clean
 
 help:  ## List commands
 	@grep -hE '^[a-z]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-9s %s\n", $$1, $$2}'
@@ -44,6 +44,12 @@ fire-reports:  ## Build real Eaton fire_reports.jsonl from the published timelin
 
 evac-orders:  ## Build real Eaton evac_orders.jsonl from the real alerts (LA County IPAWS layer)
 	uv run python scripts/build_evac_orders.py
+
+roads:  ## Build real Eaton road travel times (needs: uv sync --group dev --extra routing)
+	uv run python scripts/build_roads.py
+
+dins:  ## Build Eaton dins.geojson: which buildings burned (scoring only)
+	uv run python scripts/build_dins.py
 
 check-data:  ## Check a dataset against the data contract (DATASET=eaton by default)
 	uv run python -m backend.check_data $(or $(DATASET),eaton)

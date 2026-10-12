@@ -82,8 +82,10 @@ def path_cells(a: LatLon, b: LatLon) -> tuple[str, ...]:
 class SafetyMap:
     """Answers "may a vehicle stay in this hex until minute m?" from the forecast at plan time."""
 
-    def __init__(self, outlook: list[FireOutlook]):
+    def __init__(self, outlook: list[FireOutlook], route_cells=None):
         self.arrival = {o.h3: 0.0 if o.burning else o.arrival_p10_min for o in outlook}
+        # The cells a trip passes through: the road route when the travel engine knows it.
+        self.route_cells = route_cells or path_cells
 
     def hex_ok(self, cell: str, leave_min: float) -> bool:
         arrival = self.arrival.get(cell)
@@ -91,7 +93,7 @@ class SafetyMap:
 
     def leg_ok(self, a: LatLon, b: LatLon, depart_min: float, minutes: float) -> bool:
         """Every hex on the way, left at its interpolated time, passes the rule."""
-        cells = path_cells(a, b)
+        cells = self.route_cells(a, b)
         n = len(cells)
         return all(
             self.hex_ok(c, depart_min + minutes * (i + 1) / n) for i, c in enumerate(cells)
@@ -162,7 +164,7 @@ class _Planner:
         self.vehicles = vehicles
         self.shelters = shelters
         self.travel = travel
-        self.safety = SafetyMap(outlook)
+        self.safety = SafetyMap(outlook, getattr(travel, "cells", None))
         self.strategy = ""
 
     def option(self, pos: LatLon, clock: float, fits: bool, rid: str) -> _Option | None:

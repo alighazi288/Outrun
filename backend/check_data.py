@@ -94,6 +94,10 @@ def check_dataset(folder: Path) -> list[Finding]:
     def inside(lat: float, lon: float) -> bool:
         return box["south"] <= lat <= box["north"] and box["west"] <= lon <= box["east"]
 
+    if real and not (folder / "roads.json.gz").exists():
+        add("warning", "roads.json.gz", None,
+            "not built yet: travel uses the straight-line stub (scripts/build_roads.py)")
+
     loaded: dict[str, list[tuple[int, BaseModel]]] = {}
     for name, (model, id_field, in_area) in FILES.items():
         path = folder / name
