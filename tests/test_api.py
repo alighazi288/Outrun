@@ -163,6 +163,10 @@ def test_fire_report_by_address(client):
 
 
 def test_vehicle_runs_show_work_already_in_progress(client):
+    t = "2025-01-07T19:00:00-08:00"
+    plan = client.get("/plan", params={"t": t}).json()
+    assert client.post("/decisions", json={"plan_id": plan["plan_id"], "action": "approve",
+                                           "t": t}).status_code == 201
     runs = client.get("/vehicles", params={"t": "2025-01-07T19:00:00-08:00"}).json()
     assert len(runs) == 5
     busy = [r for r in runs if r["stops"]]
@@ -170,3 +174,25 @@ def test_vehicle_runs_show_work_already_in_progress(client):
     for r in busy:
         assert len(r["stops"]) == len(r["eta_min"])
         assert r["stops"][-1].startswith("shelter")
+
+
+def test_nothing_moves_until_the_manager_approves(client):
+    t = "2025-01-07T19:00:00-08:00"
+    assert not [r for r in client.get("/vehicles", params={"t": t}).json() if r["stops"]]
+    assert client.get("/state", params={"t": t}).json()["plan_status"] == "awaiting_decision"
+
+
+def test_a_decision_on_an_old_plan_names_the_current_one(client):
+    d = {"plan_id": "p_20250107T1850", "action": "approve", "t": "2025-01-07T19:00:00-08:00"}
+    r = client.post("/decisions", json=d)
+    assert r.status_code == 409 and "p_20250107T1900" in r.json()["detail"]
+
+
+def test_an_unsafe_or_impossible_edit_is_refused_with_a_reason(client):
+    t = "2025-01-07T19:00:00-08:00"
+    plan = client.get("/plan", params={"t": t}).json()
+    d = {"plan_id": plan["plan_id"], "action": "modify", "t": t,
+         "changes": [{"kind": "hold_vehicle", "vehicle": "v_99"}]}
+    r = client.post("/decisions", json=d)
+    assert r.status_code == 422 and "v_99" in r.json()["detail"]
+    assert client.get("/decisions").json() == [], "a refused decision is not recorded"

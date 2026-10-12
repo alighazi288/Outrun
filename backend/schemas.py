@@ -405,6 +405,11 @@ class WorldState(Model):
     plan_takes_effect_at: AwareDatetime | None = Field(
         None, description="When the plan above is approved and vehicles start following it"
     )
+    plan_status: Literal["auto", "awaiting_decision", "approved", "modified", "rejected",
+                         "expired"] = Field(
+        "auto", description="awaiting_decision: the manager must approve, modify or reject the "
+        "plan above (record_decision) before vehicles take it. auto: approved automatically "
+        "(replay and evaluation). expired: nobody decided before the next plan.")
 
 
 def capacity_demand(resident: Resident) -> tuple[int, int, int]:

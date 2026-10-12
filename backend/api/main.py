@@ -108,11 +108,16 @@ class VehicleRun(BaseModel):
 
 
 def create_app(store: DataStore | None = None, log_path: Path | None = None,
-               geocode: Geocoder = census_geocode) -> FastAPI:
+               geocode: Geocoder = census_geocode, approval: str | None = None) -> FastAPI:
+    """approval: "manager" (default: a plan only takes effect once the manager decides) or
+    "auto" (plans approve themselves, like the exported replay). Env OUTRUN_APPROVAL."""
     store = store or DataStore.from_env()
-    sim = Simulation(store)
-    clock = store.make_clock()
+    approval = approval or os.environ.get("OUTRUN_APPROVAL", "manager")
+    if approval not in ("manager", "auto"):
+        raise ValueError(f"OUTRUN_APPROVAL must be 'manager' or 'auto', not {approval!r}")
     log = DecisionLog(log_path)
+    sim = Simulation(store, decisions=(lambda: log.decisions) if approval == "manager" else None)
+    clock = store.make_clock()
     logged_plans: set[str] = set()
     sockets: set[WebSocket] = set()
 
@@ -347,10 +352,21 @@ def create_app(store: DataStore | None = None, log_path: Path | None = None,
         status_code=201,
         summary="Record what the emergency manager did with a plan",
         description="Call only after the emergency manager explicitly says approve, modify or "
-        "reject, with the plan_id from get_current_plan. Never approve on your own.",
+        "reject, with the plan_id from get_current_plan. Never approve on your own. Vehicles "
+        "only take a plan once it is approved or modified. Modify changes: remove_stop "
+        "(resident), hold_vehicle (vehicle), reassign (resident to vehicle). A 409 means the "
+        "plan is no longer the one waiting: fetch the current plan and ask again. A 422 means "
+        "an edit breaks a rule; read the reason to the manager.",
+        responses={409: {"description": "Not the plan waiting for a decision"},
+                   422: {"description": "An edit breaks a rule (the detail says which)"}},
     )
     async def record_decision(d: Decision) -> Decision:
+        if approval == "manager":
+            problem = await asyncio.to_thread(sim.replay.check_decision, d)
+            if problem is not None:
+                raise HTTPException(*problem)
         log.record("decision", d)
+        sim.replay.invalidate_from(d.t)
         await broadcast()
         return d
 

@@ -56,7 +56,14 @@ instructions: |
     new assignments earlier in this conversation, show them first and ask "Approve this plan?"
     Record only after they confirm.
   - Use plan_id and t exactly as in the latest get_current_plan output, the action they said,
-    and their own words as reason. For modify, describe the change in reason.
+    and their own words as reason. For modify, send each edit in changes: remove_stop with the
+    resident id, hold_vehicle with the vehicle id, or reassign with the resident and vehicle
+    ids. Vehicles act on exactly these, so never put an edit only in reason.
+  - Vehicles only take a plan once it is approved or modified. Until then they finish what
+    they are already doing.
+  - If record_decision says the plan is no longer current (409), get the current plan, show
+    what changed, and ask again. If it refuses an edit (422), read the reason to the manager
+    and ask what to do instead. Never retry the same edit.
   - Then confirm in one sentence what was recorded.
 collaborators:
   - outrun_intake

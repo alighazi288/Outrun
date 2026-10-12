@@ -7,13 +7,14 @@
        POST /requests and POST /reports.)
     4. Risk: priority and rescue deadline per resident.
     5. Router: re-plan routes for the fleet, within the driver-safety rule.
-    6. The plan is approved (auto-approved after the approval delay in the replay; the live
-       demo still records a person's decision through POST /decisions).
+    6. The plan is approved: automatically after the approval delay in the exported replay
+       and the evaluation; in the live API only when the manager decides (POST /decisions).
     7. Vehicles move along approved plans and pick people up (backend/replay.py).
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
 
 from backend.replay import Frame, Replay, world_state
@@ -25,9 +26,11 @@ StepResult = Frame
 
 
 class Simulation:
-    def __init__(self, store: DataStore, travel: TravelTime | None = None, planner=plan_routes):
+    def __init__(self, store: DataStore, travel: TravelTime | None = None, planner=plan_routes,
+                 decisions: Callable[[], list[Decision]] | None = None):
+        """decisions: where the manager's decisions come from. None = plans auto-approve."""
         self.store = store
-        self.replay = Replay(store, planner=planner, travel=travel)
+        self.replay = Replay(store, planner=planner, travel=travel, decisions=decisions)
 
     def invalidate(self) -> None:
         """Call after the data changes (e.g. a new help request or fire report)."""

@@ -492,7 +492,7 @@
       },
       "post": {
         "summary": "Record what the emergency manager did with a plan",
-        "description": "Call only after the emergency manager explicitly says approve, modify or reject, with the plan_id from get_current_plan. Never approve on your own.",
+        "description": "Call only after the emergency manager explicitly says approve, modify or reject, with the plan_id from get_current_plan. Never approve on your own. Vehicles only take a plan once it is approved or modified. Modify changes: remove_stop (resident), hold_vehicle (vehicle), reassign (resident to vehicle). A 409 means the plan is no longer the one waiting: fetch the current plan and ask again. A 422 means an edit breaks a rule; read the reason to the manager.",
         "operationId": "record_decision",
         "requestBody": {
           "content": {
@@ -515,15 +515,11 @@
               }
             }
           },
+          "409": {
+            "description": "Not the plan waiting for a decision"
+          },
           "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
+            "description": "An edit breaks a rule (the detail says which)"
           }
         }
       }
@@ -1975,6 +1971,20 @@
             ],
             "title": "Plan Takes Effect At",
             "description": "When the plan above is approved and vehicles start following it"
+          },
+          "plan_status": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "awaiting_decision",
+              "approved",
+              "modified",
+              "rejected",
+              "expired"
+            ],
+            "title": "Plan Status",
+            "description": "awaiting_decision: the manager must approve, modify or reject the plan above (record_decision) before vehicles take it. auto: approved automatically (replay and evaluation). expired: nobody decided before the next plan.",
+            "default": "auto"
           }
         },
         "additionalProperties": false,
