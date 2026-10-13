@@ -1,7 +1,6 @@
 """Pre-compute the whole replay into static files the dashboard can play back.
 
-    uv run outrun-export                              # -> replay/
-    uv run outrun-export --out dashboard/public/replay # for the dashboard dev server
+    OUTRUN_DATASET=eaton uv run outrun-export   # -> dashboard/public/replay
 
 Writes manifest.json, one WorldState JSON per step, and cells.geojson (the map hexagons).
 The public prototype plays these files, so it is fast, free to host, and can't crash during
@@ -41,7 +40,7 @@ def cells_geojson(cells: list[str]) -> dict:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--out", type=Path, default=REPO_ROOT / "replay")
+    parser.add_argument("--out", type=Path, default=REPO_ROOT / "dashboard" / "public" / "replay")
     parser.add_argument("--public", action="store_true",
                         help="for the judged demo: refuse unless every input is real")
     args = parser.parse_args()
@@ -62,8 +61,12 @@ def main() -> None:
         state = sim.world_state(t)
         name = f"steps/{i:04d}.json"
         (args.out / name).write_text(state.model_dump_json())
+        # "unreachable" is everyone left off this plan; split it the way a manager reads it.
+        fire_command = len(state.plan.escalated_fire_command)
         steps.append({"i": i, "t": t.isoformat(), "file": name,
                       "unreachable": len(state.plan.unreachable),
+                      "to_fire_command": fire_command,
+                      "waiting": len(state.plan.unreachable) - fire_command,
                       "at_risk": sum(k.at_risk for k in state.risks)})
     (args.out / "cells.geojson").write_text(json.dumps(cells_geojson(store.cells)))
     manifest = {

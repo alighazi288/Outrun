@@ -33,6 +33,7 @@ from eaton_timeline import (  # noqa: E402
     CITYGATE_PDF,
     FSRI_VIA_LAT,
     LA_COUNTY_START,
+    LAKE_LON,
     MCCHRYSTAL_PDF,
     PLACES,
     STREET_M,
@@ -163,7 +164,7 @@ def main() -> None:
     reports = build()
     path = DATASETS["eaton"] / "fire_reports.jsonl"
     write_jsonl(path, reports)
-    west = [r for r in reports if r.lon < -118.131466]
+    west = [r for r in reports if r.lon < LAKE_LON]
     print(f"Wrote {len(reports)} fire reports -> {path}")
     print(f"  {len(west)} west of Lake Avenue; first of those at "
           f"{west[0].reported_at.isoformat()}")

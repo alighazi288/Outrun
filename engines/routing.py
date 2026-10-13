@@ -28,7 +28,6 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
-from functools import lru_cache
 
 import h3
 
@@ -44,7 +43,7 @@ from backend.schemas import (
     Vehicle,
     capacity_demand,
 )
-from engines.travel import LatLon, TravelTime
+from engines.travel import LatLon, TravelTime, straight_cells
 
 NEED_LABEL = {
     "wheelchair": "wheelchair user",
@@ -65,18 +64,10 @@ def plan_id_for(t: datetime) -> str:
 # --------------------------------------------------------------------------------------
 
 
-@lru_cache(maxsize=200_000)
-def _path(a: str, b: str) -> tuple[str, ...]:
-    try:
-        return tuple(h3.grid_path_cells(a, b))
-    except Exception:  # far apart or across a pentagon: fall back to the endpoints
-        return (a, b)
-
-
 def path_cells(a: LatLon, b: LatLon) -> tuple[str, ...]:
-    """Hexes on the straight line from a to b. The road router should replace this with the
-    hexes of the real road path."""
-    return _path(h3.latlng_to_cell(*a, H3_RES), h3.latlng_to_cell(*b, H3_RES))
+    """Hexes on the straight line from a to b: used when the travel engine has no road routes
+    (RoadTravel.cells gives the real road's hexes)."""
+    return straight_cells(h3.latlng_to_cell(*a, H3_RES), h3.latlng_to_cell(*b, H3_RES))
 
 
 class SafetyMap:

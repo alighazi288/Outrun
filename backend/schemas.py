@@ -156,7 +156,9 @@ class Plan(Model):
     plan_id: str = Field(examples=["p_20250107T2340"])
     routes: list[Route]
     unreachable: list[str] = Field(
-        description="At-risk residents no vehicle can reach in time. Escalated, never dropped."
+        description="At-risk residents left off this plan, never dropped: either waiting for a "
+        "vehicle (all suitable vehicles are busy) or escalated to fire command (the subset in "
+        "escalated_fire_command). The reason for each is in reasons."
     )
     reasons: dict[str, str] = Field(
         description="Plain-language reason per resident, filled in from engine numbers"

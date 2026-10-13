@@ -41,10 +41,11 @@ Add a row the moment you start using a new source. Replace every `TODO` with the
 
 ## Assumed, not sourced
 
-Fleet size, speeds, loading and approval times, call behaviour and the safety margin are
-assumptions about a response that never happened. They're listed with their status and tested
-ranges in `backend/assumptions.py`. When an owner finds a source,
-it's added here and the status changes to `SOURCED`.
+Van and ambulance counts, speeds in smoke, loading and approval times, call behaviour, the
+safety margin, care-home occupancy and needs mix, and the home-oxygen rate are assumptions about
+a response that never happened. They're listed with their status and tested ranges in
+`backend/assumptions.py`. Sourced so far: the 11 buses, the wheelchair and homebound rates.
+When an owner finds a source, it's added here and the status changes to `SOURCED`.
 
 ## Attribution text (dashboard footer and write-up)
 

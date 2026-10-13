@@ -1,0 +1,75 @@
+.bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 380px;
+  z-index: 10;
+  background: rgba(13, 17, 23, 0.92);
+  backdrop-filter: blur(6px);
+  border-top: 1px solid var(--border);
+  padding: 10px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.label {
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+
+.replayControls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.liveControls {
+  display: flex;
+  gap: 8px;
+}
+
+.btn {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 4px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.btn:hover {
+  background: var(--surface-hover);
+}
+
+.btnSecondary {
+  color: var(--muted);
+}
+
+.slider {
+  flex: 1;
+  accent-color: var(--accent-fire);
+  cursor: pointer;
+}
+
+.stepCounter {
+  font-size: 12px;
+  color: var(--muted);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.risks {
+  color: var(--accent-risk);
+}
+
+.fireCommand {
+  color: var(--accent-fire);
+}
+
+.waiting {
+  color: var(--accent-wait);
+}

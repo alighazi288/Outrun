@@ -1,0 +1,347 @@
+/**
+ * OutrunMap — MapLibre map with deck.gl MapboxOverlay.
+ *
+ * Layers built with useMemo on worldState changes.
+ * Horizon toggle (1h/2h/3h) as a small control inside the map.
+ */
+
+import { useEffect, useRef, useState, useMemo, useCallback } from "react";
+import maplibregl from "maplibre-gl";
+import "maplibre-gl/dist/maplibre-gl.css";
+import { MapboxOverlay } from "@deck.gl/mapbox";
+import type { Layer } from "@deck.gl/core";
+import { useWorld } from "@/context/WorldContext";
+import { buildEvacLayer } from "@/layers/evacLayer";
+import { buildOutlookLayer, type OutlookHorizon } from "@/layers/outlookLayer";
+import {
+  buildReportsLayer,
+  buildDetectionsLayer,
+  buildFacilitiesLayer,
+  buildResidentsLayer,
+  buildSheltersLayer,
+} from "@/layers/pointLayers";
+import { buildRouteLayer } from "@/layers/routeLayer";
+import { buildVehiclesLayer } from "@/layers/vehicleLayer";
+import type { components } from "@/api-types";
+import styles from "./OutrunMap.module.css";
+
+type Resident = components["schemas"]["Resident"];
+type Shelter = components["schemas"]["Shelter"];
+type Vehicle = components["schemas"]["Vehicle"];
+type Facility = components["schemas"]["Facility"];
+
+const DARK_STYLE = "https://tiles.openfreemap.org/styles/dark";
+
+// Study area bounds: west Altadena to Convention Center shelter
+const BOUNDS: [[number, number], [number, number]] = [
+  [-118.19, 34.135], // SW
+  [-118.08, 34.23],  // NE
+];
+const FIT_PADDING = { top: 70, bottom: 130, left: 40, right: 420 };
+
+export default function OutrunMap({
+  onSelectResident,
+  selectedId: _selectedId,
+}: {
+  onSelectResident?: (id: string | null) => void;
+  selectedId?: string | null;
+}) {
+  const { worldState } = useWorld();
+  const mapRef = useRef<maplibregl.Map | null>(null);
+  const overlayRef = useRef<MapboxOverlay | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [horizon, setHorizon] = useState<OutlookHorizon>("p_1h");
+  const [tooltip, setTooltip] = useState<{
+    x: number;
+    y: number;
+    text: string;
+  } | null>(null);
+  // selectedVehicleId: the vehicle whose stop numbers are shown
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
+
+  // Initialise map once
+  useEffect(() => {
+    if (!containerRef.current || mapRef.current) return;
+
+    const map = new maplibregl.Map({
+      container: containerRef.current,
+      style: DARK_STYLE,
+      center: [-118.135, 34.183],
+      zoom: 12,
+      attributionControl: false,
+    });
+
+    map.addControl(
+      new maplibregl.AttributionControl({ compact: true }),
+      "bottom-left"
+    );
+    map.addControl(new maplibregl.NavigationControl(), "top-left");
+
+    const overlay = new MapboxOverlay({
+      layers: [],
+      getTooltip: ({ object, x, y }) => {
+        if (!object) {
+          setTooltip(null);
+          return null;
+        }
+        const text = getTooltipText(object);
+        if (text) setTooltip({ x, y, text });
+        else setTooltip(null);
+        return null; // we render our own tooltip
+      },
+      onClick: (info) => {
+        const obj = info.object as { id?: string; type?: string } | undefined;
+        if (obj?.id) {
+          // Vehicle click → select it for stop labels; also surface to parent
+          if (obj.type !== undefined) {
+            // it has a .type field → it's a Vehicle
+            setSelectedVehicleId((prev) => (prev === obj.id ? null : obj.id!));
+          }
+          onSelectResident?.(obj.id);
+        } else {
+          setSelectedVehicleId(null);
+          onSelectResident?.(null);
+        }
+      },
+    });
+
+    map.on("load", () => {
+      map.addControl(overlay);
+      map.fitBounds(BOUNDS, { padding: FIT_PADDING, animate: false });
+      map.resize();
+    });
+
+    mapRef.current = map;
+    overlayRef.current = overlay;
+
+    // ResizeObserver keeps the map canvas sized correctly
+    const ro = new ResizeObserver(() => map.resize());
+    if (containerRef.current) ro.observe(containerRef.current);
+
+    return () => {
+      ro.disconnect();
+      map.remove();
+      mapRef.current = null;
+      overlayRef.current = null;
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Build lookup maps from worldState
+  const { residentsMap, sheltersMap, vehiclesMap, facilitiesResidentMap } =
+    useMemo(() => {
+      if (!worldState)
+        return {
+          residentsMap: new Map<string, Resident>(),
+          sheltersMap: new Map<string, Shelter>(),
+          vehiclesMap: new Map<string, Vehicle>(),
+          facilitiesResidentMap: new Map<string, number>(),
+        };
+
+      const residentsMap = new Map<string, Resident>(
+        worldState.residents.map((r) => [r.id, r])
+      );
+      const sheltersMap = new Map<string, Shelter>(
+        worldState.shelters.map((s) => [s.id, s])
+      );
+      const vehiclesMap = new Map<string, Vehicle>(
+        worldState.vehicles.map((v) => [v.id, v])
+      );
+
+      // Count how many open residents each facility has
+      const pickedSet = new Set(Object.keys(worldState.picked_up ?? {}));
+      const facilitiesResidentMap = new Map<string, number>();
+      for (const f of worldState.facilities as Facility[]) {
+        const waiting = worldState.residents.filter(
+          (r) => r.facility_id === f.id && !pickedSet.has(r.id)
+        ).length;
+        facilitiesResidentMap.set(f.id, waiting);
+      }
+
+      return { residentsMap, sheltersMap, vehiclesMap, facilitiesResidentMap };
+    }, [worldState]);
+
+  // Build deck.gl layers
+  const layers = useMemo((): Layer[] => {
+    if (!worldState) return [];
+
+    const ls: Layer[] = [];
+
+    // 1. Evac zones (bottom)
+    ls.push(buildEvacLayer(worldState.orders));
+
+    // 2. Fire outlook hexes
+    ls.push(buildOutlookLayer(worldState.outlook, horizon));
+
+    // 3. Fire reports and detections
+    ls.push(buildReportsLayer(worldState.reports));
+    ls.push(buildDetectionsLayer(worldState.detections));
+
+    // 4. Care facilities
+    ls.push(
+      buildFacilitiesLayer(
+        worldState.facilities as Facility[],
+        facilitiesResidentMap
+      )
+    );
+
+    // 5. Residents (picked-up + open)
+    ls.push(
+      ...buildResidentsLayer(
+        worldState.residents as Resident[],
+        worldState.risks,
+        worldState.picked_up as Record<string, string>,
+        worldState.plan.unreachable,
+        worldState.plan.escalated_fire_command ?? []
+      )
+    );
+
+    // 6. Shelters
+    ls.push(...buildSheltersLayer(worldState.shelters as Shelter[]));
+
+    // 7. Routes: schedule (solid) always; plan.routes (dashed) only awaiting
+    ls.push(
+      ...buildRouteLayer(
+        worldState.schedule ?? [],
+        residentsMap,
+        sheltersMap,
+        vehiclesMap,
+        "solid",
+        selectedVehicleId
+      )
+    );
+    if (worldState.plan_status === "awaiting_decision") {
+      ls.push(
+        ...buildRouteLayer(
+          worldState.plan.routes,
+          residentsMap,
+          sheltersMap,
+          vehiclesMap,
+          "dashed",
+          selectedVehicleId
+        )
+      );
+    }
+
+    // 8. Vehicles (top)
+    ls.push(buildVehiclesLayer(worldState.vehicles as Vehicle[]));
+
+    return ls;
+  }, [
+    worldState,
+    horizon,
+    residentsMap,
+    sheltersMap,
+    vehiclesMap,
+    facilitiesResidentMap,
+    selectedVehicleId,
+  ]);
+
+  // Push layers to overlay on every change
+  useEffect(() => {
+    overlayRef.current?.setProps({ layers });
+  }, [layers]);
+
+  // Listen for flyto events dispatched by the right panel
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { lon, lat } = (e as CustomEvent<{ lon: number; lat: number }>).detail;
+      mapRef.current?.flyTo({ center: [lon, lat], zoom: 15, duration: 800 });
+    };
+    window.addEventListener("outrun:flyto", handler);
+    return () => window.removeEventListener("outrun:flyto", handler);
+  }, []);
+
+  const horizonLabels: { key: OutlookHorizon; label: string }[] = [
+    { key: "p_1h", label: "1 h" },
+    { key: "p_2h", label: "2 h" },
+    { key: "p_3h", label: "3 h" },
+  ];
+
+  const handleHorizonClick = useCallback(
+    (h: OutlookHorizon) => setHorizon(h),
+    []
+  );
+
+  return (
+    <div className={styles.wrapper}>
+      <div ref={containerRef} className={styles.map} />
+
+      {/* Horizon toggle */}
+      <div className={styles.horizonControl}>
+        <span className={styles.horizonLabel}>Fire risk</span>
+        {horizonLabels.map(({ key, label }) => (
+          <button
+            key={key}
+            className={`${styles.horizonBtn} ${horizon === key ? styles.active : ""}`}
+            onClick={() => handleHorizonClick(key)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Tooltip */}
+      {tooltip && (
+        <div
+          className={styles.tooltip}
+          style={{ left: tooltip.x + 10, top: tooltip.y + 10 }}
+        >
+          {tooltip.text}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Tooltip text helpers ─────────────────────────────────────────────────────
+
+function getTooltipText(obj: Record<string, unknown>): string | null {
+  // Fire report
+  if ("description" in obj && "reported_at" in obj) {
+    return `📞 ${String(obj.description)}\n${formatTime(String(obj.reported_at))}`;
+  }
+  // Detection
+  if ("source" in obj && "frp_mw" in obj) {
+    const frp = obj.frp_mw != null ? ` · ${String(obj.frp_mw)} MW` : "";
+    const footprint = obj.pixel_m != null ? ` · footprint ~${String(obj.pixel_m)} m` : "";
+    return `🛰 ${String(obj.source)}${frp}${footprint}\n${formatTime(String(obj.observed_at ?? ""))}`;
+  }
+  // Facility
+  if ("licensed_capacity" in obj && "name" in obj) {
+    return `${String(obj.name)}\n${String(obj.kind)} · ${String(obj.licensed_capacity)} licensed`;
+  }
+  // Shelter
+  if ("opened_at" in obj && "name" in obj && !("kind" in obj)) {
+    const opened = obj.opened_at
+      ? `Opened ${formatTime(String(obj.opened_at))}`
+      : "Open before fire";
+    return `🏠 ${String(obj.name)}\n${opened}`;
+  }
+  // Resident
+  if ("needs" in obj && "id" in obj) {
+    const needs = String(obj.needs || "");
+    return needs ? `${needs}` : String(obj.id);
+  }
+  // Evac order
+  if ("kind" in obj && "area" in obj && "issued_at" in obj) {
+    const k = String(obj.kind).toUpperCase();
+    return `${k}: ${String(obj.area)}\n${formatTime(String(obj.issued_at))}`;
+  }
+  return null;
+}
+
+function formatTime(iso: string): string {
+  if (!iso) return "";
+  try {
+    return new Date(iso).toLocaleString("en-US", {
+      timeZone: "America/Los_Angeles",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
+  } catch {
+    return iso;
+  }
+}

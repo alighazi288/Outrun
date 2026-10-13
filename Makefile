@@ -26,12 +26,12 @@ check: lint test  ## What CI runs: lint + tests
 api:  ## Start the API on http://localhost:8000 (docs at /docs)
 	uv run outrun-api
 
-export:  ## Pre-compute the replay into replay/
+export:  ## Pre-compute the replay into dashboard/public/replay (set OUTRUN_DATASET=eaton for real data)
 	uv run outrun-export
 
-view: export  ## Play the replay in the stand-in viewer: http://localhost:8001/scripts/viewer/
-	@echo "Open http://localhost:8001/scripts/viewer/  (Ctrl+C to stop)"
-	uv run python -m http.server 8001 --bind 127.0.0.1
+view: export  ## Play the replay in the dashboard: http://localhost:5173
+	npm --prefix dashboard install --no-audit --no-fund
+	npm --prefix dashboard run dev
 
 eval:  ## Score our planner vs the dispatcher rule (STAND-IN; ~15 s)
 	uv run python -m evaluation.standin

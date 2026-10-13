@@ -109,7 +109,7 @@ class RoadTravel:
         """Cells the road route passes through, start and end included."""
         pair = self._pair(a, b)
         if pair is None:
-            return _straight(self._cell(a[0], a[1]), self._cell(b[0], b[1]))
+            return straight_cells(self._cell(a[0], a[1]), self._cell(b[0], b[1]))
         return self._route(*pair)
 
     def _walk(self, i: int, j: int) -> tuple[str, ...]:
@@ -125,12 +125,14 @@ class RoadTravel:
         # with the cells in between so the safety rule never skips one.
         out = [route[0]]
         for a, b in zip(route, route[1:], strict=False):
-            out += _straight(a, b)[1:]
+            out += straight_cells(a, b)[1:]
         return tuple(out)
 
 
-def _straight(a: str, b: str) -> tuple[str, ...]:
-    """Cells on the straight line from a to b (just the ends if h3 can't draw it)."""
+@lru_cache(maxsize=200_000)
+def straight_cells(a: str, b: str) -> tuple[str, ...]:
+    """Cells on the straight line from cell a to cell b (just the ends if h3 can't draw it:
+    far apart or across a pentagon)."""
     try:
         return tuple(h3.grid_path_cells(a, b))
     except h3.H3BaseException:

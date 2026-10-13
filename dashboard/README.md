@@ -32,7 +32,13 @@ Design for the real user: dark theme, big readable numbers, the most urgent thin
   each a `WorldState` (`residents`, `facilities`, `reports`, `detections`, `outlook`, `risks`,
   `plan`, `orders`, ...).
   ```bash
-  uv run outrun-export --out dashboard/public/replay
+  OUTRUN_DATASET=eaton uv run outrun-export --out dashboard/public/replay   # real data
+  cd dashboard && npm install && npm run dev
+  ```
+- **Live mode** (the manager approves plans): run the API, then point the dashboard at it.
+  ```bash
+  OUTRUN_DATASET=eaton make api
+  VITE_API_URL=http://localhost:8000 npm run dev
   ```
 - **Live API (demo extras):** `GET /state?t=`, `POST /decisions`, `POST /requests`, `POST /reports`,
   and `ws://localhost:8000/ws`.

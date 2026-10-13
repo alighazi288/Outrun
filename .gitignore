@@ -27,3 +27,4 @@ dashboard/public/replay/
 .idea/
 .vscode/
 *.zip
+*.tsbuildinfo

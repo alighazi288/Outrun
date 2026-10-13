@@ -1,0 +1,83 @@
+.bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 380px;
+  z-index: 10;
+  height: 52px;
+  background: rgba(13, 17, 23, 0.92);
+  backdrop-filter: blur(6px);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 24px;
+}
+
+.title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--accent-fire);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.numbers {
+  display: flex;
+  gap: 20px;
+  flex: 1;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.statValue {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text);
+}
+
+.statLabel {
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-top: 1px;
+}
+
+.accentRisk { color: var(--accent-risk); }
+.accentFire { color: var(--accent-fire); }
+.accentSafe { color: #3fb97c; }
+.accentWait { color: var(--accent-wait); }
+
+.badge {
+  font-size: 11px;
+  padding: 3px 9px;
+  border-radius: 4px;
+  font-weight: 600;
+  flex-shrink: 0;
+  border: 1px solid transparent;
+}
+
+.badgeReal {
+  background: rgba(63, 185, 124, 0.15);
+  color: #3fb97c;
+  border-color: rgba(63, 185, 124, 0.4);
+}
+
+.badgeFake {
+  background: rgba(220, 50, 50, 0.15);
+  color: var(--accent-risk);
+  border-color: rgba(220, 50, 50, 0.4);
+}
+
+.badgeUnknown {
+  background: var(--surface);
+  color: var(--muted);
+  border-color: var(--border);
+}

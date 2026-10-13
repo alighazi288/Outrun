@@ -1,0 +1,42 @@
+.footer {
+  position: fixed;
+  bottom: 68px; /* above timeline bar (~58px) */
+  left: 0;
+  right: 380px;
+  z-index: 9;
+  background: rgba(13, 17, 23, 0.82);
+  border-top: 1px solid var(--border);
+  padding: 5px 14px;
+  font-size: 10px;
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  line-height: 1.4;
+}
+
+.statement {
+  flex: 1;
+  min-width: 0;
+}
+
+.divider {
+  opacity: 0.4;
+}
+
+.link {
+  color: var(--accent-blue);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+.attributions {
+  color: var(--muted);
+  opacity: 0.7;
+  white-space: nowrap;
+}

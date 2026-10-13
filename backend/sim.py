@@ -22,8 +22,6 @@ from backend.schemas import Decision, WorldState
 from backend.store import DataStore
 from engines import TravelTime, plan_routes
 
-StepResult = Frame
-
 
 class Simulation:
     def __init__(self, store: DataStore, travel: TravelTime | None = None, planner=plan_routes,
