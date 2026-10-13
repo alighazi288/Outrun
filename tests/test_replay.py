@@ -71,3 +71,18 @@ def test_replay_is_deterministic(store):
     a = Replay(store).run()[-1].picked_up
     b = Replay(store).run()[-1].picked_up
     assert a == b
+
+
+def test_a_dropped_frame_is_recomputed_the_same(store):
+    """Only the latest frames are kept in memory; an older one is redone from its saved state."""
+    from backend import replay as replay_module
+
+    replay = Replay(store)
+    frames = replay.run()
+    assert len(replay._frames) <= replay_module.FRAME_CACHE
+    old = frames[5]
+    assert old.snapshot.t not in replay._frames
+    again = replay.frame_at(old.snapshot.t)
+    assert again.plan == old.plan
+    assert again.picked_up == old.picked_up
+    assert again.schedule == old.schedule

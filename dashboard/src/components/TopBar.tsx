@@ -26,7 +26,7 @@ export default function TopBar() {
     const isReal = !h.synthetic && h.fake_inputs.length === 0 && h.missing_inputs.length === 0;
     if (isReal) {
       badgeClass = styles.badgeReal;
-      badgeText = source.mode === "live" ? "Real inputs · live" : "Real inputs";
+      badgeText = source.mode === "live" ? "Real inputs · manager mode" : "Real inputs";
     } else {
       const issues = [
         h.synthetic ? "synthetic dataset" : null,

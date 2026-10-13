@@ -35,7 +35,7 @@ Design for the real user: dark theme, big readable numbers, the most urgent thin
   OUTRUN_DATASET=eaton uv run outrun-export --out dashboard/public/replay   # real data
   cd dashboard && npm install && npm run dev
   ```
-- **Live mode** (the manager approves plans): run the API, then point the dashboard at it.
+- **Manager mode** (the manager approves plans on the Eaton night): run the API, then point the dashboard at it.
   ```bash
   OUTRUN_DATASET=eaton make api
   VITE_API_URL=http://localhost:8000 npm run dev

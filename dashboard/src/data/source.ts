@@ -231,8 +231,8 @@ export class LiveSource implements DataSource {
 
   get timeLabel() {
     // Use worldState.t for current time — it updates with every WS message
-    if (this.worldState?.t) return formatPacificTime(this.worldState.t) + " · live";
-    if (this._clock) return formatPacificTime(this._clock.now) + " · live";
+    if (this.worldState?.t) return formatPacificTime(this.worldState.t) + " · manager mode";
+    if (this._clock) return formatPacificTime(this._clock.now) + " · manager mode";
     return "Connecting…";
   }
 

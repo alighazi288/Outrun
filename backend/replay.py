@@ -26,6 +26,7 @@ Only data that existed at time t is used (DataStore.at(t)).
 from __future__ import annotations
 
 import copy
+from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -45,6 +46,9 @@ from backend.store import DataStore, Snapshot
 from engines import TravelTime, nowcast, plan_routes, prioritize, travel_for
 
 LatLon = tuple[float, float]
+# Frames are big (every person's risk, the plan's reasons). Keep the latest few; any older one
+# is recomputed from the saved state before it, which gives the same frame.
+FRAME_CACHE = 8
 
 
 @dataclass
@@ -124,14 +128,14 @@ class Replay:
         """Forget everything computed. Call after the data changes (a new help request)."""
         start = self.clock.start
         tracks = {v.id: Track(v, (v.lat, v.lon)) for v in self.store.vehicles}
-        self._states: list[tuple[datetime, ReplayState]] = []
-        self._frames: dict[datetime, Frame] = {}
+        self._states: list[tuple[datetime, ReplayState]] = []  # after each step, in order
+        self._frames: OrderedDict[datetime, Frame] = OrderedDict()  # the latest few steps
         self._initial = ReplayState(t=start, tracks=tracks)
 
     def invalidate_from(self, t: datetime) -> None:
         """Forget steps at or after t (a decision made at t changes nothing before it)."""
         self._states = [(when, s) for when, s in self._states if when < t]
-        self._frames = {when: f for when, f in self._frames.items() if when < t}
+        self._frames = OrderedDict((when, f) for when, f in self._frames.items() if when < t)
 
     # -- public ------------------------------------------------------------------------------
 
@@ -159,14 +163,26 @@ class Replay:
 
     def frame_at(self, t: datetime) -> Frame:
         if t in self._frames:
+            self._frames.move_to_end(t)
             return self._frames[t]
         self._compute_until(t)
         if t in self._frames:
             return self._frames[t]
-        # Between steps (or outside the window): replay from the last step on a copy.
-        before = [s for when, s in self._states if when <= t]
+        # A step whose frame was dropped: redo that step from the state before it. Between
+        # steps (or outside the window): carry on from the last step. Both on a copy.
+        on_step = t in self.step_times
+        before = [s for when, s in self._states if (when < t if on_step else when <= t)]
         state = copy.deepcopy(before[-1] if before else self._initial)
-        return self._step(state, t)
+        frame = self._step(state, t)
+        if on_step:
+            self._keep(t, frame)
+        return frame
+
+    def _keep(self, t: datetime, frame: Frame) -> None:
+        self._frames[t] = frame
+        self._frames.move_to_end(t)
+        while len(self._frames) > FRAME_CACHE:
+            self._frames.popitem(last=False)
 
     # -- the loop ------------------------------------------------------------------------------
 
@@ -178,13 +194,15 @@ class Replay:
         return state
 
     def _compute_until(self, t: datetime) -> None:
+        """Run every step up to t that hasn't run yet (saved states are always a prefix)."""
+        done = self._states[-1][0] if self._states else None
         state = copy.deepcopy(self._states[-1][1]) if self._states else copy.deepcopy(self._initial)
         for when in self.clock.times():
             if when > t:
                 break
-            if when in self._frames:
+            if done is not None and when <= done:
                 continue
-            self._frames[when] = self._step(state, when)
+            self._keep(when, self._step(state, when))
             self._states.append((when, copy.deepcopy(state)))
 
     def _step(self, state: ReplayState, t: datetime) -> Frame:

@@ -13,4 +13,6 @@ services:
     autoDeployTrigger: checksPass   # redeploy on every push to main, once CI is green
     envVars:
       - key: OUTRUN_DATASET
-        value: fixtures             # fake data until the real dataset exists
+        value: eaton                # the real Eaton dataset (all inputs real; ~215 MB peak memory)
+      - key: OUTRUN_APPROVAL
+        value: manager              # plans wait for the manager's decision
