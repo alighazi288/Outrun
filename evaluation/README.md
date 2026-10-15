@@ -5,7 +5,12 @@ holds the code that carries them out.
 
 **Now:** `standin.py` (`make eval`) is a STAND-IN: ours vs. the dispatcher rule over 5 seeds,
 scored strict (before the earliest plausible arrival) and lenient (before the first evidence of
-fire). Its docstring lists what the real version adds. Replace it piece by piece;
+fire). Each planner (ours, the dispatcher rule, closest first) runs three ways: with our
+forecast; waiting for the real orders (a vehicle only goes once an order covers the home);
+and with a perfect forecast (`perfect_forecast`, the true fire path, the upper bound). It
+also prints the ceiling (people the strict rule can never count) and where each planner's
+pickups went (in time, too late, fire never came). Replays run 4 at a time. Its docstring
+lists what the real version adds. On real data: `OUTRUN_DATASET=eaton make eval SEEDS=2`. Replace it piece by piece;
 `tests/test_eval.py` and `tests/test_arrival_window.py` pin the scoring rule.
 
 ## Pieces

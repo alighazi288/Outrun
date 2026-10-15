@@ -13,12 +13,12 @@ from backend.schemas import capacity_demand
 from engines import StraightLineTravel
 from engines.nowcast import nowcast
 from engines.risk import prioritize
-from engines.routing import SafetyMap, plan_routes, plan_routes_dispatcher
+from engines.routing import SafetyMap, plan_routes, plan_routes_closest, plan_routes_dispatcher
 
 from .conftest import pt
 
 NOWCASTS = [nowcast]
-ROUTERS = [plan_routes, plan_routes_dispatcher]  # add the OR-Tools router here
+ROUTERS = [plan_routes, plan_routes_dispatcher, plan_routes_closest]
 TIMES = ["19:00", "20:00", "21:00", "22:00"]
 
 

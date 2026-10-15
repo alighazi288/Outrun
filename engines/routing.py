@@ -1,16 +1,18 @@
 """Route optimizer: which vehicle picks up whom, in what order.
 
-Two greedy planners live here, both obeying the same rules:
-- `plan_routes` (STUB for ours): "closest first". Each free vehicle goes to the nearest waiting
-  person it can carry and reach safely in time. Also the "closest first" baseline.
-- `plan_routes_dispatcher`: the dispatcher rule, the bar ours must beat. Most urgent resident
-  first (earliest deadline), then the nearest vehicle that can carry them and reach them
-  safely. The ranking policy lives in `evaluation/heuristic.py`.
+Three greedy planners live here, all obeying the same rules:
+- `plan_routes` (ours): "most urgent first". Each vehicle, soonest free first, takes the
+  person with the earliest deadline it can carry and reach safely in time (ties: higher
+  priority, then sooner arrival). On the real night deadlines, not driving, are what limit
+  pickups, and earliest-deadline-first is the classic answer to that; an OR-Tools
+  prize-collecting router was tried on Oct 12 and did no better, at 30x the time per step.
+- `plan_routes_dispatcher`: the dispatcher rule, the bar. Most urgent resident first
+  (earliest deadline), then the nearest vehicle that can carry them and reach them safely.
+  The ranking policy lives in `evaluation/heuristic.py`.
+- `plan_routes_closest`: "closest first", the weaker baseline. Each free vehicle goes to the
+  nearest waiting person it can carry and reach safely in time.
 
-The real version of ours is OR-Tools pickup-and-delivery (seat, wheelchair and stretcher
-capacities; deadlines as time windows; priority as the penalty for leaving someone out),
-re-solved every step, keeping vehicles on their current run unless switching gains a lot.
-It must keep the same signature and pass tests/test_engines.py.
+Any new planner must keep the same signature and pass tests/test_engines.py.
 
 Rules every planner must follow:
 - Every at-risk resident ends up in exactly one route or in `unreachable`. Never dropped.
@@ -25,6 +27,7 @@ Rules every planner must follow:
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -303,6 +306,10 @@ class _Planner:
         text += f". {vehicle} arrives in {o.eta:.0f} min"
         if o.deadline is not None:
             text += f" and leaves {o.deadline - o.leave:.0f} min before the deadline"
+        if self.strategy == "most_urgent_first":
+            text += (
+                ". Most urgent first: the earliest deadline this vehicle can still meet safely"
+            )
         if self.strategy == "dispatcher_rule":
             away = f"{o.travel:.0f} min away"
             if o.deadline is not None:
@@ -360,11 +367,34 @@ def plan_routes(
     outlook: list[FireOutlook],
     travel: TravelTime,
     t: datetime,
-    previous_plan: Plan | None = None,  # unused by the stub; the real version keeps runs stable
+    previous_plan: Plan | None = None,  # unused: the replay keeps each vehicle's current run
 ) -> Plan:
-    """STUB for our planner: closest first, within the safety and deadline rules."""
+    """Ours: most urgent first (earliest deadline; ties: higher priority, then sooner
+    arrival), within the safety and deadline rules."""
+    del previous_plan
     planner = _Planner(risks, residents, vehicles, shelters, outlook, travel)
-    return planner.run(lambda o: (o.eta,), t, "closest_first_stub")
+
+    def most_urgent(o: _Option) -> tuple[float, float, float]:
+        deadline = o.deadline if o.deadline is not None else math.inf
+        return (deadline, -planner.risk[o.resident_id].priority, o.eta)
+
+    return planner.run(most_urgent, t, "most_urgent_first")
+
+
+def plan_routes_closest(
+    risks: list[ResidentRisk],
+    residents: list[Resident],
+    vehicles: list[Vehicle],
+    shelters: list[Shelter],
+    outlook: list[FireOutlook],
+    travel: TravelTime,
+    t: datetime,
+    previous_plan: Plan | None = None,
+) -> Plan:
+    """The weaker baseline: closest first, within the safety and deadline rules."""
+    del previous_plan
+    planner = _Planner(risks, residents, vehicles, shelters, outlook, travel)
+    return planner.run(lambda o: (o.eta,), t, "closest_first")
 
 
 def plan_routes_dispatcher(

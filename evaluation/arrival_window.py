@@ -34,8 +34,16 @@ from pathlib import Path
 import h3
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
+from backend.assumptions import HORIZON_MIN
 from backend.knowledge import _inside
-from backend.schemas import H3_RES, EvacOrder, FireDetection, FireReport, Resident
+from backend.schemas import (
+    H3_RES,
+    EvacOrder,
+    FireDetection,
+    FireOutlook,
+    FireReport,
+    Resident,
+)
 from engines.travel import haversine_m
 
 DETECTION_RADIUS_M = 375.0  # a VIIRS pixel
@@ -237,6 +245,36 @@ def warning_precision(
     if not warned:
         return None
     return sum(c in windows for c in warned) / len(warned)
+
+
+# --------------------------------------------------------------------------------------
+# Upper bound: the planner sees the true fire path (EVAL_SPEC section 6)
+# --------------------------------------------------------------------------------------
+
+
+def perfect_forecast(windows: dict[str, ArrivalWindow]):
+    """A stand-in for engines.nowcast that knows each hex's earliest arrival for certain.
+
+    Hindsight, so only for the upper-bound run: it shows what a perfect forecast would be
+    worth with the same fleet, people and safety rule. A hex is burning from its earliest
+    time; before that it gets p = 1 inside the horizon that covers it, and the pessimistic
+    arrival is the true one. Hexes the fire never reached never appear.
+    """
+
+    def forecast(detections, wind, cells, t: datetime, reports=()) -> list[FireOutlook]:
+        out = []
+        for c, w in windows.items():
+            minutes = (w.earliest - t).total_seconds() / 60
+            if minutes <= 0:
+                out.append(FireOutlook(t=t, h3=c, p_1h=1, p_2h=1, p_3h=1, arrival_p10_min=0,
+                                       burning=True))
+            elif minutes <= HORIZON_MIN:
+                p1, p2, p3 = (1.0 if minutes <= h else 0.0 for h in (60, 120, 180))
+                out.append(FireOutlook(t=t, h3=c, p_1h=p1, p_2h=p2, p_3h=p3,
+                                       arrival_p10_min=minutes))
+        return out
+
+    return forecast
 
 
 # --------------------------------------------------------------------------------------

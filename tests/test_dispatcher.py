@@ -11,7 +11,7 @@ import h3
 from backend.assumptions import NEED_PROFILES, SAFETY_MARGIN_MIN
 from backend.clock import parse_t
 from backend.schemas import H3_RES, FireOutlook, Resident, ResidentRisk, Shelter, Vehicle
-from engines.routing import plan_routes
+from engines.routing import plan_routes, plan_routes_closest
 from engines.routing import plan_routes_dispatcher as engine_dispatcher
 from engines.travel import StraightLineTravel
 from evaluation.heuristic import DispatchOption, assign_round, choose_assignment
@@ -111,11 +111,25 @@ def test_earlier_deadline_is_the_first_stop_even_when_someone_else_is_closer():
         [_risk("close", 160, priority=5), _risk("urgent", 50, priority=0.1)],
     )
     assert _first(plan, "van") == "urgent"
-    closest = plan_routes(
+    closest = plan_routes_closest(
         [_risk("close", 160, priority=5), _risk("urgent", 50, priority=0.1)],
         [close, urgent], [van], [_shelter()], [], TRAVEL, T,
     )
     assert _first(closest, "van") == "close"
+
+
+def test_ours_goes_to_the_most_urgent_first_and_breaks_ties_by_priority():
+    van = _vehicle("van", 34.20, -118.13)
+    close = _resident("close", 34.202, -118.13)
+    urgent = _resident("urgent", 34.26, -118.13)
+    risks = [_risk("close", 160, priority=5), _risk("urgent", 50, priority=0.1)]
+    assert _first(plan_routes(risks, [close, urgent], [van], [_shelter()], [], TRAVEL, T),
+                  "van") == "urgent"
+    # Same block, same deadline: the higher priority (e.g. bedbound) goes first.
+    a, b = _resident("a", 34.21, -118.13), _resident("b", 34.21, -118.13)
+    risks = [_risk("a", 90, priority=0.6), _risk("b", 90, priority=1.0)]
+    plan = plan_routes(risks, [a, b], [van], [_shelter()], [], TRAVEL, T)
+    assert _first(plan, "van") == "b" and plan.strategy == "most_urgent_first"
 
 
 def test_nearest_vehicle_gets_the_person_not_the_one_that_is_free_earlier():

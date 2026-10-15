@@ -20,7 +20,9 @@ Every replay step t (10 minutes):
      next step is replaced by a fresh one, and until a plan is approved vehicles keep the
      schedule they already have: nothing new starts without a person saying yes.
 
-Only data that existed at time t is used (DataStore.at(t)).
+Only data that existed at time t is used (DataStore.at(t)). The one exception is the
+evaluation's upper bound, which passes `forecast` = the true fire path to measure what a
+perfect forecast would be worth (evaluation/arrival_window.py perfect_forecast).
 """
 
 from __future__ import annotations
@@ -114,9 +116,11 @@ class Replay:
         travel: TravelTime | None = None,
         approval_delay_min: float = APPROVAL_DELAY_MIN,
         decisions: Callable[[], list[Decision]] | None = None,
+        forecast=nowcast,  # same signature as engines.nowcast
     ):
         self.store = store
         self.planner = planner
+        self.forecast = forecast
         self.travel = travel or travel_for(store.folder)  # real roads when the dataset has them
         self.delay = timedelta(minutes=approval_delay_min)
         self.decisions = decisions  # None: plans are auto-approved
@@ -208,7 +212,7 @@ class Replay:
     def _step(self, state: ReplayState, t: datetime) -> Frame:
         self._advance_to(state, t)
         snap = self.store.at(t)
-        outlook = nowcast(snap.detections, snap.wind, self.store.cells, t, snap.reports)
+        outlook = self.forecast(snap.detections, snap.wind, self.store.cells, t, snap.reports)
         if self.decisions is None:
             if state.pending is None:
                 self._plan(state, snap, outlook, t)

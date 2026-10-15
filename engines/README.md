@@ -10,10 +10,10 @@ and agents work end to end. We can then replace the stub behind the **same signa
 
 | File | Signature | Stub | Real version |
 |---|---|---|---|
-| `nowcast.py` | `nowcast(detections, wind, cells, t, reports)` → `list[FireOutlook]` | elliptical spread from recent fire evidence (detections **and** reports) + log-normal uncertainty | spread fitted from past fires; 100+ Monte Carlo runs with varied wind; **downwind embers** |
+| `nowcast.py` | `nowcast(detections, wind, cells, t, reports)` → `list[FireOutlook]` | elliptical spread from recent fire evidence (detections **and** reports) + log-normal uncertainty. Oct 12: a latest-scan front + fixed ember reach, chosen on Palisades, failed on Eaton and was not kept (`make forecast-check`) | spread fitted from past fires; 100+ Monte Carlo runs with varied wind; **downwind embers** |
 | `risk.py` | `prioritize(residents, outlook, t)` → `list[ResidentRisk]` | deadline = p10 arrival − margin (latest time to *leave*); priority = p_3h × weight | P(fire arrives before our earliest pickup) × weight |
 | `travel.py` | `TravelTime.minutes(a, b)`, `cells(a, b)` | straight line × 1.3 at 30 km/h | **Built:** `RoadTravel`, OSM shortest paths at `SPEED_FACTOR` × road speed, with the cells each route passes through. Still to do: detour around burning or blocked roads |
-| `routing.py` | `plan_routes(risks, residents, vehicles, shelters, outlook, travel, t, previous_plan)` → `Plan` | closest first, within the safety rule | OR-Tools pickup-and-delivery + rolling re-plan |
+| `routing.py` | `plan_routes(risks, residents, vehicles, shelters, outlook, travel, t, previous_plan)` → `Plan` | most urgent first (earliest deadline; ties: priority), within the safety rule; `plan_routes_closest` is the weaker baseline | OR-Tools was tried Oct 12: no better on the real night, 30x slower per step |
 | `routing.py` | `plan_routes_dispatcher(...)`, same signature | most urgent first (earliest deadline), nearest suitable vehicle | this is the bar; the ranking is in `evaluation/heuristic.py` |
 
 ## Rules for every implementation
