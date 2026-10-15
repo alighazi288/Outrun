@@ -196,3 +196,8 @@ def test_an_unsafe_or_impossible_edit_is_refused_with_a_reason(client):
     r = client.post("/decisions", json=d)
     assert r.status_code == 422 and "v_99" in r.json()["detail"]
     assert client.get("/decisions").json() == [], "a refused decision is not recorded"
+
+
+def test_the_bare_link_opens_the_docs(client):
+    r = client.get("/", follow_redirects=False)
+    assert r.status_code in (302, 307) and r.headers["location"] == "/docs"

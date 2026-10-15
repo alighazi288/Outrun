@@ -20,6 +20,7 @@ import h3
 import uvicorn
 from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 from pydantic import AwareDatetime, BaseModel, Field
 
 from backend.assumptions import HANDLING_DELAY_MIN
@@ -183,11 +184,16 @@ def create_app(store: DataStore | None = None, log_path: Path | None = None,
         return ClockInfo(start=clock.start, end=clock.end, now=clock.now,
                          step_minutes=int(clock.step.total_seconds() // 60))
 
+    @app.get("/", include_in_schema=False)
+    def root() -> RedirectResponse:
+        """Someone opening the bare link lands on the API docs, not a 404."""
+        return RedirectResponse("/docs")
+
     @app.get("/health", operation_id="health")
     def health() -> dict:
         return {"status": "ok", "dataset": store.name, "now": clock.now.isoformat(),
                 "synthetic": store.synthetic, "fake_inputs": store.fake_inputs,
-                "missing_inputs": store.missing_inputs}
+                "missing_inputs": store.missing_inputs, **store.area_info()}
 
     @app.get("/clock", operation_id="get_clock", summary="Current replay time")
     def get_clock() -> ClockInfo:
