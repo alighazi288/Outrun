@@ -47,6 +47,8 @@ DATA_DIR = Path(os.environ.get("OUTRUN_DATA_DIR", REPO_ROOT / "data"))
 DATASETS = {
     "fixtures": DATA_DIR / "fixtures" / "eaton_fake",
     "eaton": DATA_DIR / "processed" / "eaton",
+    # Development set for the forecast: same night, another fire (scripts/fires.py).
+    "palisades": DATA_DIR / "processed" / "palisades",
 }
 # Bounding box for FIRMS/GOES/HRRR downloads and spatial tests (Western Eaton fire area)
 EATON_DOWNLOAD_BOX = {"west": -118.23, "south": 34.12, "east": -118.03, "north": 34.26}
@@ -173,6 +175,14 @@ class DataStore:
             wind=as_of(self.wind, t),
             orders=as_of(self.orders, t),
         )
+
+
+def study_cells(folder: Path, meta: dict) -> list[str]:
+    """The map cells of a dataset: listed in meta["cells"] (e.g. land only, for a coastal
+    fire), else every cell covering the bbox."""
+    if "cells" in meta:
+        return sorted(json.loads((folder / meta["cells"]).read_text()))
+    return grid_cells(meta["bbox"])
 
 
 def grid_cells(bbox: dict) -> list[str]:

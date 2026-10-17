@@ -66,3 +66,19 @@ def test_a_real_dataset_borrows_people_and_fleet_but_never_a_fake_fire(tmp_path)
                                       "shelters.jsonl"}
     assert store.detections == [] and store.reports == [] and store.wind == []
     assert not store.complete, "the judged export refuses until every input is real"
+
+
+def test_a_dataset_can_list_its_own_cells(tmp_path):
+    """A coastal fire's map is land only: meta.json names a cell list, used instead of the box."""
+    import json
+
+    import h3
+
+    from backend.store import grid_cells, study_cells
+
+    box = {"south": 34.10, "west": -118.20, "north": 34.12, "east": -118.18}
+    land = grid_cells(box)[:5]
+    (tmp_path / "cells.json").write_text(json.dumps(land))
+    assert study_cells(tmp_path, {"bbox": box, "cells": "cells.json"}) == sorted(land)
+    assert study_cells(tmp_path, {"bbox": box}) == grid_cells(box)
+    assert all(h3.get_resolution(c) == 9 for c in land)

@@ -33,8 +33,20 @@ view: export  ## Play the replay in the dashboard: http://localhost:5173
 	npm --prefix dashboard install --no-audit --no-fund
 	npm --prefix dashboard run dev
 
-eval:  ## Score our planner vs the dispatcher rule (STAND-IN; ~15 s)
-	uv run python -m evaluation.standin
+live-pull:  ## What is live over an area right now: fire, wind, alerts (DATASET=eaton)
+	uv run python -m backend.feeds --dataset $(or $(DATASET),eaton)
+
+live-fires:  ## US wildfires still burning right now (NIFC)
+	uv run python -m backend.area --fires
+
+live-area:  ## Set up any US area from national data: make live-area LAT=39.76 LON=-121.62 NAME=paradise
+	uv run python -m backend.area --lat $(LAT) --lon $(LON) --name $(NAME)
+
+eval:  ## Score the planners vs waiting for orders and a perfect forecast (STAND-IN; SEEDS=5)
+	uv run python -m evaluation.standin --seeds $(or $(SEEDS),5)
+
+forecast-check:  ## Score the fire forecast (DATASET=palisades to choose settings; eaton once)
+	OUTRUN_DATASET=$(or $(DATASET),palisades) uv run python -m evaluation.forecast_check
 
 arrival-window:  ## Build arrival_window.jsonl (when fire reached each hex) for OUTRUN_DATASET
 	uv run python scripts/build_arrival_window.py

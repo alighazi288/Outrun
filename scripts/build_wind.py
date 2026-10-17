@@ -1,45 +1,38 @@
-"""Build data/processed/eaton/wind.jsonl from NOAA HRRR surface forecasts.
+"""Build a dataset's wind.jsonl from NOAA HRRR surface forecasts.
 
-For every HRRR sfc cycle from 2025-01-07 18:00 UTC to 2025-01-10 08:00 UTC (hourly)
-and fxx 0–3, loads 10 m U/V wind components and surface gust, crops to the study box,
-and writes one WindForecast record per grid cell per forecast.
+For every hourly HRRR sfc cycle in the fire's window (scripts/fires.py; Eaton: 2025-01-07
+18:00 UTC to 2025-01-10 08:00 UTC) and fxx 0–3, loads 10 m U/V wind components and surface
+gust, crops to the fire's box, and writes one WindForecast record per grid cell per forecast.
+Downloads run 4 at a time; each GRIB subset is deleted once cropped unless --keep-grib.
 
 run_at is set to the HRRR cycle time (in Pacific). The publish lag (the delay
 between cycle time and when the forecast is available on AWS) is applied at load time
 by WindForecast.visible_from() (run_at + HRRR_PUBLISH_LAG_MIN).
 
     uv sync --extra wx
-    uv run python scripts/build_wind.py          # all cycles
-    uv run python scripts/build_wind.py --quick  # first 3 cycles only (for testing)
+    uv run python scripts/build_wind.py                    # eaton, all cycles
+    uv run python scripts/build_wind.py --fire palisades
+    uv run python scripts/build_wind.py --quick            # first 3 cycles only (for testing)
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import logging
-from datetime import UTC, datetime, timedelta
+import sys
+from concurrent.futures import ProcessPoolExecutor
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import numpy as np
 
-from backend.clock import PACIFIC
+from backend.clock import PACIFIC, parse_t
 from backend.schemas import WindForecast
-from backend.store import DATASETS, EATON_DOWNLOAD_BOX, write_jsonl
+from backend.store import write_jsonl
 
-# Study bounding box (Western Eaton fire area)
-W = EATON_DOWNLOAD_BOX["west"]
-S = EATON_DOWNLOAD_BOX["south"]
-E = EATON_DOWNLOAD_BOX["east"]
-N = EATON_DOWNLOAD_BOX["north"]
-
-# Full run window: 2025-01-07 18:00 UTC to 2025-01-10 08:00 UTC, every hour
-_UTC = UTC
-RUN_START = datetime(2025, 1, 7, 18, 0, tzinfo=_UTC)
-RUN_END = datetime(2025, 1, 10, 8, 0, tzinfo=_UTC)
-
-# Replay window for gap-check (PST = UTC-8)
-REPLAY_START_PST = datetime(2025, 1, 7, 18, 0, tzinfo=PACIFIC)
-REPLAY_END_PST = datetime(2025, 1, 8, 6, 0, tzinfo=PACIFIC)
+sys.path.insert(0, str(Path(__file__).parent))
+from fires import FIRES, fire_arg  # noqa: E402
 
 HRRR_CACHE_DIR = Path("data/raw/hrrr")
 
@@ -47,21 +40,23 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(message)s")
 log = logging.getLogger(__name__)
 
 
-def _cycles() -> list[datetime]:
-    """Return every hourly HRRR cycle from RUN_START to RUN_END inclusive."""
+def _cycles(start: datetime, end: datetime) -> list[datetime]:
+    """Return every hourly HRRR cycle from start to end inclusive."""
     out: list[datetime] = []
-    t = RUN_START
-    while t <= RUN_END:
+    t = start
+    while t <= end:
         out.append(t)
         t += timedelta(hours=1)
     return out
 
 
-def _load_cycle(cycle: datetime, fxx: int) -> list[WindForecast]:
+def _load_cycle(cycle: datetime, fxx: int, box: dict, keep_grib: bool) -> list[WindForecast]:
     """Fetch one HRRR sfc cycle/fxx and return WindForecast records for every grid cell
-    inside the study box. Returns [] and logs a warning if the file is unavailable."""
+    inside the box. Returns [] and logs a warning if the file is unavailable."""
     from herbie import Herbie  # lazy import; optional dependency
 
+    W, S, E, N = (box[k] for k in ("west", "south", "east", "north"))
+    remove = not keep_grib
     cycle_str = cycle.strftime("%Y-%m-%d %H:%M")
     try:
         H = Herbie(
@@ -71,8 +66,8 @@ def _load_cycle(cycle: datetime, fxx: int) -> list[WindForecast]:
             fxx=fxx,
             save_dir=str(HRRR_CACHE_DIR),
         )
-        ds_uv = H.xarray(":(?:UGRD|VGRD):10 m above ground", remove_grib=False)
-        ds_gust = H.xarray(":GUST:surface", remove_grib=False)
+        ds_uv = H.xarray(":(?:UGRD|VGRD):10 m above ground", remove_grib=remove)
+        ds_gust = H.xarray(":GUST:surface", remove_grib=remove)
     except Exception as exc:
         log.warning("Skipping cycle %s fxx=%d: %s", cycle_str, fxx, exc)
         return []
@@ -193,9 +188,15 @@ def main() -> None:
             " writes to data/raw/hrrr/wind_quick.jsonl"
         ),
     )
+    parser.add_argument("--keep-grib", action="store_true",
+                        help="keep the downloaded GRIB subsets in data/raw/hrrr (~6 MB each)")
+    fire_arg(parser)
     args = parser.parse_args()
+    fire = FIRES[args.fire]
+    replay = json.loads((fire.folder / "meta.json").read_text())["replay"]
+    replay_start, replay_end = parse_t(replay["start"]), parse_t(replay["end"])
 
-    cycles = _cycles()
+    cycles = _cycles(*fire.hrrr_utc)
     if args.quick:
         cycles = cycles[:3]
         log.info("--quick: running %d cycles only", len(cycles))
@@ -207,19 +208,16 @@ def main() -> None:
     all_records: list[WindForecast] = []
     missing: list[tuple[datetime, int]] = []  # (cycle, fxx) pairs that returned no rows
 
-    for cycle in cycles:
-        cycle_recs: list[WindForecast] = []
-        for fxx in range(4):  # 0, 1, 2, 3
-            recs = _load_cycle(cycle, fxx)
+    jobs = [(cycle, fxx) for cycle in cycles for fxx in range(4)]  # fxx 0, 1, 2, 3
+    with ProcessPoolExecutor(4) as pool:
+        results = pool.map(
+            _load_cycle, *zip(*jobs, strict=True),
+            [fire.box] * len(jobs), [args.keep_grib] * len(jobs),
+        )
+        for (cycle, fxx), recs in zip(jobs, results, strict=True):
             if not recs:
                 missing.append((cycle, fxx))
-            cycle_recs.extend(recs)
-        all_records.extend(cycle_recs)
-        log.info(
-            "cycle %s → %d points across fxx 0-3",
-            cycle.strftime("%Y-%m-%dT%H:%MZ"),
-            len(cycle_recs),
-        )
+            all_records.extend(recs)
 
     # Gap check: report every (cycle, fxx) that returned no rows
     if missing:
@@ -227,7 +225,7 @@ def main() -> None:
         critical: list[tuple[datetime, int]] = []
         for cyc, fxx in missing:
             valid_at_pst = (cyc + timedelta(hours=fxx)).astimezone(PACIFIC)
-            in_window = REPLAY_START_PST <= valid_at_pst <= REPLAY_END_PST
+            in_window = replay_start <= valid_at_pst <= replay_end
             marker = " *** IN REPLAY WINDOW ***" if in_window else ""
             log.warning(
                 "  missing: cycle %s fxx=%d  (valid_at %s)%s",
@@ -241,7 +239,7 @@ def main() -> None:
         if critical:
             raise SystemExit(
                 f"{len(critical)} missing (cycle, fxx) pairs have valid_at inside the replay "
-                f"window {REPLAY_START_PST.isoformat()} – {REPLAY_END_PST.isoformat()}: "
+                f"window {replay_start.isoformat()} – {replay_end.isoformat()}: "
                 + ", ".join(
                     f"cycle={c.strftime('%Y-%m-%dT%H:%MZ')} fxx={f}" for c, f in critical
                 )
@@ -266,7 +264,7 @@ def main() -> None:
             f"  dir_from_deg  mean={np.mean(dirs):.1f}"
         )
     else:
-        out_path = DATASETS["eaton"] / "wind.jsonl"
+        out_path = fire.folder / "wind.jsonl"
         write_jsonl(out_path, all_records)
         log.info("Wrote %d WindForecast records → %s", len(all_records), out_path)
 

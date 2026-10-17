@@ -1,0 +1,24 @@
+{
+  "name": "palisades",
+  "synthetic": false,
+  "description": "Palisades Fire, forecast development set: real satellites, wind and damage. People and fleet are borrowed fakes; not for dispatch claims.",
+  "bbox": {
+    "west": -118.7076,
+    "south": 34.0118,
+    "east": -118.4772,
+    "north": 34.1468
+  },
+  "cells": "cells.json",
+  "h3_res": 9,
+  "replay": {
+    "start": "2025-01-07T10:30:00-08:00",
+    "end": "2025-01-08T16:00:00-08:00",
+    "step_minutes": 10
+  },
+  "fire_start": "2025-01-07T10:30:00-08:00",
+  "fire_start_source": "CAL FIRE incident record, Palisades Fire (https://incidents.fire.ca.gov/umbraco/api/IncidentApi/List?inactive=true&year=2025)",
+  "study_area": {
+    "source": "CAL FIRE DINS (DINS_2025_Palisades_Public_View) inspection extent + 2 km; land = US Census Bureau TIGERweb cartographic boundary, Los Angeles County (GEOID 06037, 1:500k)",
+    "margin_km": 2.0
+  }
+}

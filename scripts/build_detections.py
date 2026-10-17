@@ -1,14 +1,16 @@
-"""Build data/processed/eaton/detections.jsonl from FIRMS VIIRS CSVs and GOES-18 FDCC files.
+"""Build a dataset's detections.jsonl from FIRMS VIIRS CSVs and GOES-18 FDCC files.
 
 Downloads VIIRS CSVs from the FIRMS area API if the cache is missing (requires FIRMS_MAP_KEY in
 the environment). Downloads GOES-18 ABI-L2-FDCC NetCDF files via goes2go (cached under
 data/raw/goes/).  Applies three filters before writing:
 
   1. Drop type == 2  ("other static land source") – available on SP archive rows only.
-  2. Drop any detection within 1 km of (34.153, -118.193) – a static heat source visible
-     every night including before ignition (NRT rows carry no type field so we filter by
-     location instead; GOES pixels near this spot are filtered the same way).
-  3. Drop anything observed before 2025-01-07 18:18 PST (ignition).
+  2. Drop any detection within 1 km of a known static heat source (Eaton: (34.153, -118.193),
+     visible every night including before ignition; NRT rows carry no type field so we
+     filter by location instead; GOES pixels near this spot are filtered the same way).
+  3. Drop anything observed before ignition.
+
+The fire's box, ignition, GOES window and static sources come from scripts/fires.py.
 
 FIRMS latency is NOT applied here.  available_at=None for every detection.  The latency offset
 is applied at load time by backend/store.py.
@@ -16,15 +18,19 @@ is applied at load time by backend/store.py.
 Prints row counts and what each filter removed.
 
 Setup:
-    uv sync --extra wx --extra geo
-    uv run --with goes2go python scripts/build_detections.py
+    uv sync --group dev --extra wx --extra geo
+    uv run --with goes2go --with h5py --with netCDF4 python scripts/build_detections.py
+    uv run --with goes2go --with h5py --with netCDF4 python scripts/build_detections.py \
+        --fire palisades
 """
 
 from __future__ import annotations
 
+import argparse
 import io
 import os
 import re
+import sys
 import warnings
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -37,27 +43,17 @@ import xarray as xr
 
 from backend.clock import PACIFIC
 from backend.schemas import H3_RES, FireDetection
-from backend.store import DATASETS, EATON_DOWNLOAD_BOX, write_jsonl
+from backend.store import write_jsonl
 from engines.travel import haversine_m
 
-# Bounding box used for the FIRMS area API download and GOES spatial filter
-W = EATON_DOWNLOAD_BOX["west"]
-S = EATON_DOWNLOAD_BOX["south"]
-E = EATON_DOWNLOAD_BOX["east"]
-N = EATON_DOWNLOAD_BOX["north"]
+sys.path.insert(0, str(Path(__file__).parent))
+from fires import FIRES, Fire, fire_arg  # noqa: E402
 
 VIIRS_SOURCES = ["VIIRS_SNPP_SP", "VIIRS_NOAA20_SP", "VIIRS_NOAA21_NRT"]
 
-RAW_CSV = Path("data/raw/firms/viirs_eaton_2025-01-07_to_10.csv")
-GOES_DIR = Path("data/raw/goes")
+GOES_DIR = Path("data/raw/goes")  # CONUS scans: one cache serves every fire
 
-# Static heat source seen every night before ignition (no FIRMS type on NRT rows)
-STATIC_SOURCE_LAT = 34.153
-STATIC_SOURCE_LON = -118.193
-STATIC_SOURCE_RADIUS_M = 1_000.0  # 1 km
-
-# Ignition time: drop anything observed before this
-IGNITION = datetime(2025, 1, 7, 18, 18, tzinfo=PACIFIC)
+STATIC_SOURCE_RADIUS_M = 1_000.0  # 1 km around a known static heat source
 
 # Source name the schema uses; map from the satellite shortcode in the CSV
 _SAT_TO_SOURCE = {
@@ -87,14 +83,16 @@ def _confidence_for_mask(code: int) -> str:
 # FIRMS VIIRS download
 # ──────────────────────────────────────────────────────────────────────────────
 
-def download_csv() -> None:
-    """Download VIIRS detections from the FIRMS area API and save to RAW_CSV.
+def download_csv(fire: Fire) -> None:
+    """Download VIIRS detections from the FIRMS area API and save to fire.raw_viirs.
 
     Raises SystemExit if any source returns a non-CSV response so the partial
     cache is never written.
     """
     key = os.environ["FIRMS_MAP_KEY"]
-    RAW_CSV.parent.mkdir(parents=True, exist_ok=True)
+    raw_csv = fire.raw_viirs
+    raw_csv.parent.mkdir(parents=True, exist_ok=True)
+    W, S, E, N = (fire.box[k] for k in ("west", "south", "east", "north"))
     frames = []
     for source in VIIRS_SOURCES:
         url = (
@@ -117,13 +115,13 @@ def download_csv() -> None:
     if not frames:
         raise SystemExit("No data returned from any FIRMS source — check FIRMS_MAP_KEY and bbox")
     combined = pd.concat(frames, ignore_index=True)
-    combined.to_csv(RAW_CSV, index=False)
-    print(f"Saved {len(combined):,} rows → {RAW_CSV}")
+    combined.to_csv(raw_csv, index=False)
+    print(f"Saved {len(combined):,} rows → {raw_csv}")
 
 
-def load_and_parse() -> pd.DataFrame:
+def load_and_parse(raw_csv: Path) -> pd.DataFrame:
     """Read the raw CSV and add observed_at (Pacific)."""
-    df = pd.read_csv(RAW_CSV)
+    df = pd.read_csv(raw_csv)
     # acq_time is an integer like 130 (= 01:30 UTC) – zero-pad to 4 digits
     acq_time_str = df["acq_time"].astype(int).astype(str).str.zfill(4)
     df["observed_at"] = pd.to_datetime(
@@ -205,11 +203,10 @@ def _goes_latlon(ds: xr.Dataset) -> tuple[np.ndarray, np.ndarray]:
     return lon2d, lat2d
 
 
-def download_goes() -> list[str]:
-    """Download GOES-18 ABI-L2-FDCC files for the study window and return local paths.
+def download_goes(fire: Fire) -> list[str]:
+    """Download GOES-18 ABI-L2-FDCC files for the fire's window and return local paths.
 
-    Window: 2025-01-07 18:00 PST – 2025-01-08 06:00 PST
-           = 2025-01-08 02:00 UTC – 2025-01-08 14:00 UTC
+    Eaton: 2025-01-07 18:00 PST – 2025-01-08 06:00 PST = 2025-01-08 02:00 – 14:00 UTC.
     Files are cached under data/raw/goes/.
     """
     from goes2go import GOES  # optional dependency
@@ -217,8 +214,8 @@ def download_goes() -> list[str]:
     GOES_DIR.mkdir(parents=True, exist_ok=True)
     g = GOES(satellite=18, product="ABI-L2-FDCC", domain="C")
     dl = g.timerange(
-        start="2025-01-08 02:00",
-        end="2025-01-08 14:00",
+        start=fire.goes_utc[0],
+        end=fire.goes_utc[1],
         save_dir=str(GOES_DIR),
         return_as="filelist",
     )
@@ -227,11 +224,12 @@ def download_goes() -> list[str]:
     return local_files
 
 
-def build_goes_detections(local_files: list[str]) -> list[FireDetection]:
+def build_goes_detections(local_files: list[str], box: dict) -> list[FireDetection]:
     """Parse each GOES NetCDF file and return FireDetection records for fire pixels.
 
-    Keeps pixels with Mask in 10-15 or 30-35 whose centre lies inside W/S/E/N.
+    Keeps pixels with Mask in 10-15 or 30-35 whose centre lies inside the box.
     """
+    W, S, E, N = (box[k] for k in ("west", "south", "east", "north"))
     records: list[FireDetection] = []
     for fpath in local_files:
         t_utc = _file_time_utc(fpath)
@@ -286,8 +284,8 @@ def build_goes_detections(local_files: list[str]) -> list[FireDetection]:
 # Shared filters
 # ──────────────────────────────────────────────────────────────────────────────
 
-def _near_static_source(lat: float, lon: float) -> bool:
-    return haversine_m((lat, lon), (STATIC_SOURCE_LAT, STATIC_SOURCE_LON)) <= STATIC_SOURCE_RADIUS_M
+def _near_static_source(lat: float, lon: float, sources) -> bool:
+    return any(haversine_m((lat, lon), s) <= STATIC_SOURCE_RADIUS_M for s in sources)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -295,6 +293,10 @@ def _near_static_source(lat: float, lon: float) -> bool:
 # ──────────────────────────────────────────────────────────────────────────────
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    fire_arg(parser)
+    fire = FIRES[parser.parse_args().fire]
+    raw_csv, ignition = fire.raw_viirs, fire.ignition
     try:
         import goes2go  # noqa: F401
         import pyproj  # noqa: F401
@@ -306,15 +308,15 @@ def main() -> None:
         ) from exc
 
     # ── VIIRS ─────────────────────────────────────────────────────────────────
-    if not RAW_CSV.exists():
-        print(f"Raw CSV not found at {RAW_CSV}, downloading …")
-        download_csv()
+    if not raw_csv.exists():
+        print(f"Raw CSV not found at {raw_csv}, downloading …")
+        download_csv(fire)
     else:
-        print(f"Using cached CSV: {RAW_CSV}")
+        print(f"Using cached CSV: {raw_csv}")
 
-    df = load_and_parse()
+    df = load_and_parse(raw_csv)
     total_raw = len(df)
-    print(f"\nLoaded {total_raw:,} rows from {RAW_CSV.name}")
+    print(f"\nLoaded {total_raw:,} rows from {raw_csv.name}")
 
     # Filter 1: drop type == 2 ("other static land source")
     type_2_mask = pd.to_numeric(df["type"], errors="coerce") == 2
@@ -324,21 +326,19 @@ def main() -> None:
 
     # Filter 2: drop detections within 1 km of the known static source
     static_mask = df.apply(
-        lambda r: _near_static_source(float(r["latitude"]), float(r["longitude"])),
+        lambda r: _near_static_source(
+            float(r["latitude"]), float(r["longitude"]), fire.static_sources),
         axis=1,
-    )
+    ).astype(bool)
     n_static = int(static_mask.sum())
     df = df[~static_mask].copy()
-    print(
-        f"  Dropped {n_static:,} rows within 1 km of "
-        f"static source ({STATIC_SOURCE_LAT}, {STATIC_SOURCE_LON})"
-    )
+    print(f"  Dropped {n_static:,} rows within 1 km of a static source {fire.static_sources}")
 
     # Filter 3: drop anything before ignition
-    before_ignition_mask = df["observed_at"] < IGNITION
+    before_ignition_mask = df["observed_at"] < ignition
     n_pre = int(before_ignition_mask.sum())
     df = df[~before_ignition_mask].copy().reset_index(drop=True)
-    print(f"  Dropped {n_pre:,} rows observed before ignition ({IGNITION.isoformat()})")
+    print(f"  Dropped {n_pre:,} rows observed before ignition ({ignition.isoformat()})")
     print(f"  Remaining VIIRS: {len(df):,} of {total_raw:,} rows")
 
     viirs_records: list[FireDetection] = []
@@ -348,16 +348,18 @@ def main() -> None:
 
     # ── GOES-18 ───────────────────────────────────────────────────────────────
     print("\nDownloading/loading GOES-18 ABI-L2-FDCC …")
-    local_goes = download_goes()
-    goes_all = build_goes_detections(local_goes)
+    local_goes = download_goes(fire)
+    goes_all = build_goes_detections(local_goes, fire.box)
     print(f"  Raw GOES fire pixels: {len(goes_all):,}")
 
-    # Apply same static-source filter (within 1 km of 34.153, -118.193)
-    goes_filtered = [d for d in goes_all if not _near_static_source(d.lat, d.lon)]
+    # Apply the same static-source filter
+    goes_filtered = [
+        d for d in goes_all if not _near_static_source(d.lat, d.lon, fire.static_sources)
+    ]
     n_goes_static = len(goes_all) - len(goes_filtered)
 
     # Apply ignition filter
-    goes_final = [d for d in goes_filtered if d.observed_at >= IGNITION]
+    goes_final = [d for d in goes_filtered if d.observed_at >= ignition]
     n_goes_pre = len(goes_filtered) - len(goes_final)
 
     print(f"  Dropped {n_goes_static:,} GOES pixels near static source")
@@ -368,15 +370,14 @@ def main() -> None:
     all_records: list[FireDetection] = viirs_records + goes_final
     all_records.sort(key=lambda d: d.observed_at)
 
-    out_dir = DATASETS["eaton"]
-    out_path = out_dir / "detections.jsonl"
+    out_path = fire.folder / "detections.jsonl"
     write_jsonl(out_path, all_records)
 
     print(f"\nWrote {len(all_records):,} total detections → {out_path}")
     print(f"  VIIRS: {len(viirs_records):,}")
     print(f"  GOES-18: {len(goes_final):,}")
 
-    if goes_final:
+    if goes_final and fire.name == "eaton":
         first_goes = min(goes_final, key=lambda d: d.observed_at)
         print(f"  First GOES detection time: {first_goes.observed_at.isoformat()}")
         goes_west = [d for d in goes_final if d.lon < -118.131]

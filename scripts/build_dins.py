@@ -1,26 +1,31 @@
-"""Build data/processed/eaton/dins.geojson: which buildings the Eaton Fire damaged (scoring only).
+"""Build a dataset's dins.geojson: which buildings the fire damaged (scoring only).
 
 CAL FIRE's Damage Inspection (DINS) public view: every inspected structure with its damage
 level. It says which buildings burned, never when, and it is after-the-fact data, so the
 replay never loads it: only evaluation/arrival_window.py reads it, to decide which hexes the
 fire reached. Points outside the study area box are left out. No parcel numbers are kept.
 
-    uv run python scripts/build_dins.py
+    uv run python scripts/build_dins.py                    # eaton
+    uv run python scripts/build_dins.py --fire palisades
 """
 
 from __future__ import annotations
 
+import argparse
 import json
+import sys
 import urllib.parse
 import urllib.request
+from pathlib import Path
 
-from backend.store import DATASETS
+sys.path.insert(0, str(Path(__file__).parent))
+from fires import FIRES, fire_arg  # noqa: E402
 
-DINS = ("https://services1.arcgis.com/jUJYIo9tSA7EHvfZ/arcgis/rest/services/"
-        "DINS_2025_Eaton_Public_View/FeatureServer/0/query")
+LAYERS = "https://services1.arcgis.com/jUJYIo9tSA7EHvfZ/arcgis/rest/services"
 
 
-def download(bbox: dict) -> dict:
+def download(bbox: dict, layer: str) -> dict:
+    url = f"{LAYERS}/{layer}/FeatureServer/0/query"
     features, offset = [], 0
     while True:
         query = urllib.parse.urlencode({
@@ -31,7 +36,7 @@ def download(bbox: dict) -> dict:
             "orderByFields": "OBJECTID", "resultOffset": offset, "resultRecordCount": 5000,
             "f": "geojson",
         })
-        with urllib.request.urlopen(f"{DINS}?{query}", timeout=120) as r:
+        with urllib.request.urlopen(f"{url}?{query}", timeout=120) as r:
             page = json.load(r)
         batch = page.get("features", [])
         features += batch
@@ -45,9 +50,12 @@ def download(bbox: dict) -> dict:
 
 
 def main() -> None:
-    folder = DATASETS["eaton"]
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    fire_arg(parser)
+    fire = FIRES[parser.parse_args().fire]
+    folder = fire.folder
     bbox = json.loads((folder / "meta.json").read_text())["bbox"]
-    data = download(bbox)
+    data = download(bbox, fire.dins_layer)
     out = folder / "dins.geojson"
     out.write_text(json.dumps(data, separators=(",", ":")) + "\n")
     damage: dict[str, int] = {}
