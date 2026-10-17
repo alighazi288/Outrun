@@ -1,11 +1,15 @@
-# Render Blueprint: the live API that Orchestrate agents and the dashboard's live features call.
-# Python version comes from .python-version; dependencies from uv.lock.
-# The public link judges open is the static replay, so it never depends on this service.
+# Render Blueprint: three free services.
+#   outrun-dashboard  the public frontend link: the dashboard, with the Eaton replay built in.
+#                     Its replay mode never depends on the two APIs below.
+#   outrun-api        the Eaton night in manager mode (Orchestrate agents and the dashboard call it)
+#   outrun-live       live mode: any US area on today's data
+# Python version comes from .python-version; dependencies from uv.lock. Free web services sleep
+# after 15 min idle; the first request wakes them (~1 min).
 services:
   - type: web
     name: outrun-api
     runtime: python
-    plan: free                      # sleeps after 15 min idle; the first request wakes it (~1 min)
+    plan: free
     region: oregon
     buildCommand: uv sync --frozen --no-dev
     startCommand: uv run --no-dev outrun-api
@@ -16,3 +20,41 @@ services:
         value: eaton                # the real Eaton dataset (all inputs real; ~215 MB peak memory)
       - key: OUTRUN_APPROVAL
         value: manager              # plans wait for the manager's decision
+
+  - type: web
+    name: outrun-live
+    runtime: python
+    plan: free
+    region: oregon
+    buildCommand: uv sync --frozen --no-dev
+    startCommand: uv run --no-dev outrun-live
+    healthCheckPath: /health
+    autoDeployTrigger: checksPass
+    envVars:                    
+      - key: FIRMS_MAP_KEY
+        sync: false
+      - key: CENSUS_API_KEY
+        sync: false
+    # Areas are set up on demand into data/live/ on the service's own disk. A free service's
+    # disk is wiped on every deploy or restart: the picker sets an area up again in 15-60 s.
+
+  - type: web
+    name: outrun-dashboard
+    runtime: static
+    # The static builder may not have Python, so install uv (it fetches its own Python), build
+    # the Eaton replay files (~1-2 min), then the dashboard.
+    buildCommand: >-
+      curl -LsSf https://astral.sh/uv/install.sh | sh &&
+      $HOME/.local/bin/uv sync --frozen --no-dev &&
+      $HOME/.local/bin/uv run --no-dev outrun-export &&
+      npm --prefix dashboard ci --no-audit --no-fund &&
+      npm --prefix dashboard run build
+    staticPublishPath: dashboard/dist
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: OUTRUN_DATASET
+        value: eaton
+      - key: VITE_API_URL           # the two services above
+        value: https://outrun-api.onrender.com
+      - key: VITE_LIVE_URL
+        value: https://outrun-live.onrender.com
