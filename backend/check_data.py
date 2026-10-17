@@ -96,7 +96,7 @@ def check_dataset(folder: Path) -> list[Finding]:
 
     if real and not (folder / "roads.json.gz").exists():
         add("warning", "roads.json.gz", None,
-            "not built yet: travel uses the straight-line stub (scripts/build_roads.py)")
+            "not built yet: travel uses the straight-line estimate (scripts/build_roads.py)")
 
     loaded: dict[str, list[tuple[int, BaseModel]]] = {}
     for name, (model, id_field, in_area) in FILES.items():

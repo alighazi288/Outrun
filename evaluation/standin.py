@@ -1,5 +1,5 @@
-"""STAND-IN evaluation: does our planner get more people out before the fire than the
-dispatcher rule, and than waiting for the official orders?
+"""The evaluation, small version: does our planner get more people out before the fire than
+the dispatcher rule, and than waiting for the official orders?
 
     OUTRUN_DATASET=eaton uv run python -m evaluation.standin --seeds 2   # or: make eval
 
@@ -25,10 +25,10 @@ The arrival window comes from `evaluation/arrival_window.py`: DINS for which hex
 VIIRS passes for when they were last seen clear and first seen burning, published reports
 for the hours before the first satellite pass.
 
-What makes this a stand-in:
+What the full evaluation adds (EVAL_SPEC §6, not run yet: about 2,000 replays):
 - A few random draws (seeds) of who is known and when (who's on the registry, when each
-  person calls), on one fixed population. The real version: 30 synthetic populations per
-  setting, plus the settings sweep and the fleet curve.
+  person calls), on one fixed population. Full: 30 synthetic populations per setting, each
+  assumption tested over its range (the sweep), and the fleet-size curve.
 - On fake data the numbers mean nothing. They only show the pipeline works.
 """
 
@@ -188,7 +188,8 @@ def main() -> None:
         return f"{median(values):g}"
 
     reached = results[("ours", MODES[0])][0].strict.reached
-    print(f"STAND-IN evaluation · dataset '{store.name}' · {len(seeds)} seeds")
+    print(f"Evaluation (small version: no settings sweep) · dataset '{store.name}' · "
+          f"{len(seeds)} seeds")
     if "fake" in store.name:
         print("FAKE DATA: these numbers only show the pipeline works. Don't quote them.")
     print(f"\nVulnerable people whose home the fire reached: {reached}")

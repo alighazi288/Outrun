@@ -1,7 +1,7 @@
 # scripts/
 
-Command-line scripts. Each writes files; none is imported by the backend. Plus `viewer/`, a
-stand-in map that plays the replay until the real dashboard (`dashboard/`) is ready.
+Command-line scripts. Each writes files; none is imported by the backend. Builders take
+`--fire eaton|palisades` where they apply (settings in `fires.py`).
 
 | Script | What | Run |
 |---|---|---|

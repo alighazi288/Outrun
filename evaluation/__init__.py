@@ -1,4 +1,4 @@
-"""Evaluation: dispatcher heuristic, arrival window, sweeps, report."""
+"""Evaluation: dispatcher rule, arrival window, scoring, forecast scorecard."""
 
 from evaluation.heuristic import plan_routes_dispatcher
 

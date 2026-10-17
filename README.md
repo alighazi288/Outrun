@@ -70,7 +70,7 @@ The dashboard has three modes, switched in its top bar (and kept in the address,
 
 | Mode | What it shows | Needs |
 |---|---|---|
-| Eaton replay | the real night, Jan 7-8 2025, only what was known at each moment | `make export` |
+| Eaton replay | the real night, Jan 7-8 2025, only what was known at each moment | `make export`. The hosted dashboard ships it saved in `dashboard/replay.tar.gz`: after changing the engines or the Eaton data, run `make replay-bundle` and commit that file |
 | Eaton · manager | the same night on the API; plans wait for the manager's decision | `make api` |
 | Live | today's real US wildfires: pick one (or any place) and Outrun sets the area up from national data in about a minute, then plans on the real clock | `make live`, `FIRMS_MAP_KEY` and `CENSUS_API_KEY` in `.env` |
 
@@ -90,7 +90,7 @@ Extras per card: `uv sync --group dev --extra routing` (OSMnx, OR-Tools), `--ext
 | `engines/` | Fire nowcast, risk, travel time, router with the driver-safety rule |
 | `agents/` | watsonx Orchestrate agent YAML (Intake, Dispatch) |
 | `dashboard/` | React map. The judged demo plays saved frames |
-| `evaluation/` | Dispatcher heuristic, arrival window, sweeps, report |
+| `evaluation/` | Dispatcher rule, arrival window, scoring the planners (`make eval`), the forecast scorecard (`make forecast-check`) |
 | `data/` | Dataset contract, fake test fixtures, `raw/` (not committed), `processed/` (small files), `BUILD.md` |
 | `scripts/` | Fake-data generator, OpenAPI export, data-build scripts |
 | `tests/` | Contract tests every folder must pass (no hindsight, driver safety, never dropped) |

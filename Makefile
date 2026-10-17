@@ -4,7 +4,7 @@
 -include .env
 export
 
-.PHONY: help install test lint fix check api live export view live-pull live-fires live-area eval forecast-check arrival-window check-data fixtures openapi fire-reports evac-orders roads dins clean
+.PHONY: help install test lint fix check api live export replay-bundle view live-pull live-fires live-area eval forecast-check arrival-window check-data fixtures openapi fire-reports evac-orders roads dins clean
 
 help:  ## List commands
 	@grep -hE '^[a-z]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-9s %s\n", $$1, $$2}'
@@ -32,6 +32,10 @@ live:  ## Start the live server on http://localhost:8001 (any US area, today's d
 export:  ## Pre-compute the replay into dashboard/public/replay (set OUTRUN_DATASET=eaton for real data)
 	uv run outrun-export
 
+replay-bundle:  ## Save the Eaton replay as dashboard/replay.tar.gz
+	OUTRUN_DATASET=eaton uv run outrun-export
+	COPYFILE_DISABLE=1 tar --no-xattrs -czf dashboard/replay.tar.gz -C dashboard/public replay
+
 view: export  ## Play the replay in the dashboard: http://localhost:5173
 	npm --prefix dashboard install --no-audit --no-fund
 	npm --prefix dashboard run dev
@@ -45,7 +49,7 @@ live-fires:  ## US wildfires still burning right now (NIFC)
 live-area:  ## Set up any US area from national data: make live-area LAT=39.76 LON=-121.62 NAME=paradise
 	uv run python -m backend.area --lat $(LAT) --lon $(LON) --name $(NAME)
 
-eval:  ## Score the planners vs waiting for orders and a perfect forecast (STAND-IN; SEEDS=5)
+eval:  ## Score the planners vs waiting for orders and a perfect forecast (SEEDS=5; no sweep yet)
 	uv run python -m evaluation.standin --seeds $(or $(SEEDS),5)
 
 forecast-check:  ## Score the fire forecast (DATASET=palisades to choose settings; eaton once)

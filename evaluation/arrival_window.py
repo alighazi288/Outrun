@@ -253,7 +253,7 @@ def warning_precision(
 
 
 def perfect_forecast(windows: dict[str, ArrivalWindow]):
-    """A stand-in for engines.nowcast that knows each hex's earliest arrival for certain.
+    """A replacement for engines.nowcast that knows each hex's earliest arrival for certain.
 
     Hindsight, so only for the upper-bound run: it shows what a perfect forecast would be
     worth with the same fleet, people and safety rule. A hex is burning from its earliest

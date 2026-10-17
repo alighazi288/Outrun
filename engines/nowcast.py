@@ -1,14 +1,14 @@
 """Fire nowcast: P(fire reaches each map cell within 1, 2 and 3 hours).
 
-STUB. Good enough to drive the rest of the system, not good enough to evaluate. The real
-version (see engines/README.md) fits the spread rate from past fires and runs 100+ Monte
-Carlo runs with varied wind, including downwind ember spotting.
+A simple spread model. It warns hours ahead (scored with `make forecast-check`), but too
+broadly. Next, not built: many simulated runs with varied wind and downwind embers (see
+engines/README.md).
 
 Fire evidence comes from two sources: satellite detections and fire reports (911/radio).
 Reports matter: on the Eaton night the VIIRS satellite's first detection came at 1:30 a.m.,
 hours after the first reports of fire west of Lake Avenue.
 
-How the stub works:
+How it works:
 1. Cells within DETECTION_RADIUS_M of a detection or a report
    precision of a report, are burning (arrival = 0).
 2. The active fire front is the evidence from the last ACTIVE_WINDOW.
@@ -95,7 +95,7 @@ def _evidence(detections: list[FireDetection], reports: Sequence[FireReport]) ->
     """Where and when fire was seen. Only the centre of each piece of evidence counts as
     burning: a 2 km GOES pixel or a report placed to within 1 km says the fire is somewhere in
     that area, not that all of it burns (marking whole pixels put 211 of 579 real cells
-    "burning" by 20:00). Spreading that location uncertainty is the real version's job."""
+    "burning" by 20:00). Spreading that location uncertainty is for the simulated-runs model."""
     evidence = [_Evidence(d.lat, d.lon, d.observed_at, DETECTION_RADIUS_M) for d in detections]
     evidence += [_Evidence(r.lat, r.lon, r.reported_at, DETECTION_RADIUS_M) for r in reports]
     return evidence

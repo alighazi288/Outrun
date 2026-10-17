@@ -1,7 +1,7 @@
 """Travel time between two points.
 
 The router only talks to the `TravelTime` protocol. `RoadTravel` uses real roads (built by
-scripts/build_roads.py); `StraightLineTravel` is the stub for datasets without a road file.
+scripts/build_roads.py); `StraightLineTravel` is the estimate for datasets without a road file.
 """
 
 from __future__ import annotations
@@ -46,11 +46,8 @@ class TravelTime(Protocol):
 
 @dataclass
 class StraightLineTravel:
-    """STUB. Straight-line distance, stretched by a detour factor, at a slow smoke speed.
-
-    Real version: shortest path on the OSMnx drive network at SPEED_FACTOR x road speed,
-    with blocked roads removed, cached per time step. It should also report the hexes a route
-    passes through, so the safety rule checks real paths instead of straight lines.
+    """Straight-line distance, stretched by a detour factor, at a slow smoke speed. For areas
+    with no road file yet (areas set up on demand, test fixtures); RoadTravel has real roads.
     """
 
     speed_kmh: float = STUB_SPEED_KMH

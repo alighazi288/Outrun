@@ -8,8 +8,8 @@ The deadline is the driver-safety rule applied at the pickup hex: the router che
 rule for every hex a vehicle passes through (engines/routing.py). Constants live in
 backend/assumptions.py.
 
-STUB uses p_3h as "P(fire arrives)". The real version should use the probability that fire
-arrives before our earliest possible pickup, which needs travel times (see engines/README.md).
+"P(fire arrives)" is the 3-hour chance p_3h. Better, not built: the chance fire arrives
+before our earliest possible pickup, which needs travel times (see engines/README.md).
 """
 
 from __future__ import annotations
