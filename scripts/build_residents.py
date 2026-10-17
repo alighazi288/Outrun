@@ -35,14 +35,12 @@ import urllib.request
 import h3
 
 from backend.assumptions import (
-    BEDBOUND_SHARE_65,
     FACILITY_NEEDS,
     FACILITY_OCCUPANCY,
     MIN_HOME_SQFT,
     NEED_PROFILES,
-    OXYGEN_SHARE_65,
-    WHEELCHAIR_SHARE_OF_AMBULATORY,
 )
+from backend.census import allocate, tract_needs
 from backend.knowledge import _inside
 from backend.schemas import H3_RES, Facility, Resident
 from backend.store import DATA_DIR, DATASETS, grid_cells, read_jsonl, write_jsonl
@@ -62,11 +60,6 @@ ACS_FILES = ("https://www2.census.gov/programs-surveys/acs/summary_file/2023/tab
 LARIAC_2020 = ("https://services.arcgis.com/RmCCgQtiZLDCtblq/arcgis/rest/services/"
                "Countywide_Building_Outlines_(2020)/FeatureServer/0/query")
 
-# People with an ambulatory difficulty, all ages 5+ (male, then female).
-AMBULATORY = [f"B18105_E{n:03d}" for n in (4, 7, 10, 13, 16, 20, 23, 26, 29, 32)]
-AGE_65 = [f"B01001_E{n:03d}" for n in (*range(20, 26), *range(44, 50))]  # 65+, male and female
-# Households with no vehicle, by size (4 = four or more).
-NO_CAR_BY_SIZE = {1: "B08201_E008", 2: "B08201_E014", 3: "B08201_E020", 4: "B08201_E026"}
 NURSING = ("skilled nursing", "congregate living", "intermediate care", "hospice")
 
 
@@ -158,30 +151,6 @@ def download_tract_home_counts(tracts: dict) -> dict[str, int]:
         TRACT_HOMES_RAW.parent.mkdir(parents=True, exist_ok=True)
         TRACT_HOMES_RAW.write_text(json.dumps(counts))
     return json.loads(TRACT_HOMES_RAW.read_text())
-
-
-def tract_needs(acs: dict[str, int]) -> dict[tuple[str, int], float]:
-    """Expected number of people (need, household size) in one tract."""
-    ambulatory = sum(acs[v] for v in AMBULATORY)
-    age_65 = sum(acs[v] for v in AGE_65)
-    out = {
-        ("wheelchair", 1): ambulatory * WHEELCHAIR_SHARE_OF_AMBULATORY,
-        ("bedbound", 1): age_65 * BEDBOUND_SHARE_65,
-        ("oxygen", 1): age_65 * OXYGEN_SHARE_65,
-    }
-    for size, var in NO_CAR_BY_SIZE.items():
-        out[("no_car", size)] = acs[var]
-    return out
-
-
-def allocate(n: int, shares: dict[str, float]) -> list[str]:
-    """n items split by shares, largest remainder first: the counts always add up to n."""
-    exact = {k: n * v / sum(shares.values()) for k, v in shares.items()}
-    counts = {k: math.floor(v) for k, v in exact.items()}
-    short = n - sum(counts.values())
-    for k in sorted(exact, key=lambda k: exact[k] - counts[k], reverse=True)[:short]:
-        counts[k] += 1
-    return [k for k in shares for _ in range(counts[k])]
 
 
 def _rings(geometry: dict) -> list[list[list[float]]]:

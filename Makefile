@@ -26,6 +26,9 @@ check: lint test  ## What CI runs: lint + tests
 api:  ## Start the API on http://localhost:8000 (docs at /docs)
 	uv run outrun-api
 
+live:  ## Start the live server on http://localhost:8001 (any US area, today's data)
+	uv run outrun-live
+
 export:  ## Pre-compute the replay into dashboard/public/replay (set OUTRUN_DATASET=eaton for real data)
 	uv run outrun-export
 

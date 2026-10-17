@@ -99,6 +99,13 @@ HRRR_PUBLISH_LAG_MIN = 60.0  # HRRR model run time -> forecast available
 # Buses: the 11 Pasadena Transit sent that night (scripts/build_vehicles.py). Vans and
 # ambulances: no source gives how many were free, so the evaluation spec's baseline.
 FLEET_BASELINE = {"wheelchair_van": 4, "ambulance": 4, "bus": 11}
+# Vehicle type -> (id prefix, seats, wheelchair spaces, stretcher spaces). Bus: Pasadena
+# Transit New Flyer XN35; van: Pasadena Dial-A-Ride (scripts/build_vehicles.py).
+VEHICLE_SPECS = {
+    "bus": ("bus", 32, 2, 0),
+    "wheelchair_van": ("van", 6, 4, 0),
+    "ambulance": ("amb", 2, 1, 1),
+}
 APPROVAL_DELAY_MIN = 5.0  # plan made at t takes effect at t + this
 ROAD_BLOCKAGE = 0.0  # share of road segments blocked (downed lines, debris)
 

@@ -113,13 +113,17 @@ class DataStore:
         self.orders = read_jsonl(self._path("evac_orders.jsonl"), EvacOrder, optional=True)
         self.reports = read_jsonl(self._path("fire_reports.jsonl"), FireReport, optional=True)
         self.facilities = read_jsonl(self._path("facilities.jsonl"), Facility, optional=True)
+        if knowledge is None and self.meta.get("live"):
+            # Live: nobody's help call is simulated. The planner knows care homes, the pre-fire
+            # list, and real help requests (POST /requests) as they come in.
+            knowledge = KnowledgeParams(never_call=1.0)
         known = assign_knowledge(
             self.population, self.orders, self.reports, self.detections, seed, knowledge
         )
         self.residents = known.residents
         self.never_known = known.never_known
         self.wind = read_jsonl(self._path("wind.jsonl"), WindForecast, optional=True)
-        self.cells = grid_cells(self.meta["bbox"])
+        self.cells = study_cells(folder, self.meta)
 
     def _path(self, name: str) -> Path:
         """Where to read `name` from. A fake dataset must be complete. A real one may still be

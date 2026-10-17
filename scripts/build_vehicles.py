@@ -21,25 +21,19 @@ What is assumed (backend/assumptions.py FLEET_BASELINE, swept in the evaluation)
 
 from __future__ import annotations
 
-from backend.assumptions import FLEET_BASELINE
+from backend.assumptions import FLEET_BASELINE, VEHICLE_SPECS
 from backend.schemas import Vehicle
 from backend.store import DATASETS, write_jsonl
 
 YARD = "pasadena_transit_yard"  # 303 N Allen Ave, Pasadena
 YARD_LAT, YARD_LON = 34.150791, -118.113256
 
-# type -> (id prefix, seats, wheelchair spaces, stretcher spaces)
-SPECS = {
-    "bus": ("bus", 32, 2, 0),
-    "wheelchair_van": ("van", 6, 4, 0),
-    "ambulance": ("amb", 2, 1, 1),
-}
 
 
 def build() -> list[Vehicle]:
     out = []
     for kind, count in FLEET_BASELINE.items():
-        prefix, seats, wheelchair, stretcher = SPECS[kind]
+        prefix, seats, wheelchair, stretcher = VEHICLE_SPECS[kind]
         out += [
             Vehicle(id=f"{prefix}_{n:02d}", type=kind, seats=seats,
                     wheelchair_spaces=wheelchair, stretcher_spaces=stretcher,

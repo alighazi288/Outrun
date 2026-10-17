@@ -12,6 +12,7 @@ __pycache__/
 # Big or rebuilt data (small files in data/processed/ ARE committed)
 data/raw/
 data/runs/
+data/live/
 replay/
 *.graphml
 *.grib2
@@ -21,6 +22,9 @@ replay/
 node_modules/
 dashboard/dist/
 dashboard/public/replay/
+
+# Code graph: built over local-only docs too, so it stays local
+graphify-out/
 
 # OS / editors
 .DS_Store

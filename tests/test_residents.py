@@ -7,6 +7,7 @@ import json
 
 import pytest
 
+from backend import census
 from backend.assumptions import FACILITY_OCCUPANCY
 from backend.schemas import Facility, Resident
 from backend.store import DATASETS, REPO_ROOT, read_jsonl
@@ -32,12 +33,12 @@ def test_allocate_always_adds_up():
 
 
 def test_tract_needs_from_census_counts():
-    acs = {v: 0 for v in build_residents.AMBULATORY + build_residents.AGE_65}
-    acs |= {v: 0 for v in build_residents.NO_CAR_BY_SIZE.values()}
-    acs[build_residents.AMBULATORY[0]] = 100
-    acs[build_residents.AGE_65[0]] = 1000
-    acs[build_residents.NO_CAR_BY_SIZE[2]] = 7
-    needs = build_residents.tract_needs(acs)
+    acs = {v: 0 for v in census.AMBULATORY + census.AGE_65}
+    acs |= {v: 0 for v in census.NO_CAR_BY_SIZE.values()}
+    acs[census.AMBULATORY[0]] = 100
+    acs[census.AGE_65[0]] = 1000
+    acs[census.NO_CAR_BY_SIZE[2]] = 7
+    needs = census.tract_needs(acs)
     assert needs[("wheelchair", 1)] == pytest.approx(12)
     assert needs[("bedbound", 1)] == pytest.approx(10)
     assert needs[("no_car", 2)] == 7
