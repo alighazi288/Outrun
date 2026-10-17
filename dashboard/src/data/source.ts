@@ -9,6 +9,7 @@
  */
 
 import type { components } from "@/api-types";
+import { untilAwake } from "@/route";
 import { formatDateTimeZone, setTimeZone } from "@/time";
 import type { Bbox, ReplayManifest } from "@/types";
 
@@ -295,7 +296,11 @@ export class LiveSource implements DataSource {
 
   async init() {
     try {
-      await this._refresh();
+      await untilAwake(this.apiUrl, () => this._refresh(), () => {
+        this.error = "Waking up the server (free hosting sleeps when idle; about a minute)…";
+        this._notify();
+      });
+      this.error = null;
       this._openWs();
       if (this.follow) this._follow = setInterval(() => void this._refresh(), FOLLOW_MS);
     } catch (e) {

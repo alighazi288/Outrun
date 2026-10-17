@@ -50,3 +50,25 @@ export function useRoute(): [Route, (route: Route) => void] {
   };
   return [route, setRoute];
 }
+
+/** Free hosting puts a server to sleep when idle; the first request wakes it in about a minute.
+ *  Retry `load` every WAKE_RETRY_MS until it works or WAKE_LIMIT_MS passes, calling
+ *  `onWaiting` while it waits. A local server is not retried: it's either running or not. */
+const WAKE_RETRY_MS = 10_000;
+const WAKE_LIMIT_MS = 180_000;
+
+export const isLocal = (url: string) => /\/\/(localhost|127\.0\.0\.1)\b/.test(url);
+
+export async function untilAwake<T>(url: string, load: () => Promise<T>,
+                                    onWaiting: () => void): Promise<T> {
+  const giveUp = Date.now() + (isLocal(url) ? 0 : WAKE_LIMIT_MS);
+  for (;;) {
+    try {
+      return await load();
+    } catch (e) {
+      if (Date.now() >= giveUp) throw e;
+      onWaiting();
+      await new Promise((resolve) => setTimeout(resolve, WAKE_RETRY_MS));
+    }
+  }
+}

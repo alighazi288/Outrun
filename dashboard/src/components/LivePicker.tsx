@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { LIVE_URL } from "@/route";
+import { isLocal, LIVE_URL, untilAwake } from "@/route";
 import { ago } from "@/time";
 import styles from "./LivePicker.module.css";
 
@@ -35,17 +35,29 @@ export default function LivePicker({ onOpen }: { onOpen: (area: string) => void 
   const [busy, setBusy] = useState<string | null>(null);
   const [place, setPlace] = useState({ name: "", lat: "", lon: "" });
 
+  const [waking, setWaking] = useState(false);
+
   useEffect(() => {
+    const json = async <T,>(path: string): Promise<T> => {
+      const r = await fetch(`${LIVE_URL}${path}`);
+      if (!r.ok) throw new Error(String(r.status));
+      return (await r.json()) as T;
+    };
     const load = async () => {
       try {
-        const [a, f] = await Promise.all([
-          fetch(`${LIVE_URL}/areas`).then((r) => r.json() as Promise<Area[]>),
-          fetch(`${LIVE_URL}/fires?days=3`).then((r) => r.json() as Promise<Fire[]>),
-        ]);
+        const [a, f] = await untilAwake(
+          LIVE_URL,
+          () => Promise.all([json<Area[]>("/areas"), json<Fire[]>("/fires?days=3")]),
+          () => setWaking(true),
+        );
         setAreas(a);
         setFires(f);
       } catch {
-        setError(`Can't reach the live server at ${LIVE_URL}. Start it with: make live`);
+        setError(isLocal(LIVE_URL)
+          ? `Can't reach the live server at ${LIVE_URL}. Start it with: make live`
+          : "The live server isn't answering. Try again in a minute.");
+      } finally {
+        setWaking(false);
       }
     };
     void load();
@@ -80,6 +92,11 @@ export default function LivePicker({ onOpen }: { onOpen: (area: string) => void 
           need a ride (Census), nursing homes (Medicare), open shelters (FEMA), today's
           satellites, wind and alerts. Then it plans, and a manager approves.
         </p>
+        {waking && (
+          <p className={styles.busy}>
+            Waking up the live server: free hosting sleeps when nobody's using it. About a minute.
+          </p>
+        )}
         {error && <p className={styles.error}>{error}</p>}
         {busy && <p className={styles.busy}>Setting up {busy}… usually 15-60 seconds.</p>}
 

@@ -41,12 +41,18 @@ services:
   - type: web
     name: outrun-dashboard
     runtime: static
-    # The static builder may not have Python, so install uv (it fetches its own Python), build
-    # the Eaton replay files (~1-2 min), then the dashboard.
+    # Build the Eaton replay files (~1-2 min), then the dashboard. Render's static builder wraps
+    # python3 and uv in setup scripts that break uv ("Failed to inspect Python interpreter ...
+    # envwrappers/python3") and sets UV_NO_MANAGED_PYTHON. So: install our own uv, clear those
+    # settings for it, and let it download its own Python into a fresh environment.
     buildCommand: >-
-      curl -LsSf https://astral.sh/uv/install.sh | sh &&
-      $HOME/.local/bin/uv sync --frozen --no-dev &&
-      $HOME/.local/bin/uv run --no-dev outrun-export &&
+      curl -LsSf https://astral.sh/uv/install.sh |
+      env UV_INSTALL_DIR="$HOME/.uvbin" INSTALLER_NO_MODIFY_PATH=1 sh &&
+      UV="env -u UV_NO_MANAGED_PYTHON -u UV_PYTHON -u VIRTUAL_ENV
+      UV_PYTHON_PREFERENCE=only-managed UV_PROJECT_ENVIRONMENT=$HOME/outrun-venv
+      $HOME/.uvbin/uv" &&
+      $UV sync --frozen --no-dev &&
+      $UV run --no-dev outrun-export &&
       npm --prefix dashboard ci --no-audit --no-fund &&
       npm --prefix dashboard run build
     staticPublishPath: dashboard/dist
