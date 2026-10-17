@@ -41,25 +41,13 @@ services:
   - type: web
     name: outrun-dashboard
     runtime: static
-    # Build the Eaton replay files (~1-2 min), then the dashboard. Render's static builder wraps
-    # python3 and uv in setup scripts that break uv ("Failed to inspect Python interpreter ...
-    # envwrappers/python3") and sets UV_NO_MANAGED_PYTHON. So: install our own uv, clear those
-    # settings for it, and let it download its own Python into a fresh environment.
-    buildCommand: >-
-      curl -LsSf https://astral.sh/uv/install.sh |
-      env UV_INSTALL_DIR="$HOME/.uvbin" INSTALLER_NO_MODIFY_PATH=1 sh &&
-      UV="env -u UV_NO_MANAGED_PYTHON -u UV_PYTHON -u VIRTUAL_ENV
-      UV_PYTHON_PREFERENCE=only-managed UV_PROJECT_ENVIRONMENT=$HOME/outrun-venv
-      $HOME/.uvbin/uv" &&
-      $UV sync --frozen --no-dev &&
-      $UV run --no-dev outrun-export &&
-      npm --prefix dashboard ci --no-audit --no-fund &&
-      npm --prefix dashboard run build
-    staticPublishPath: dashboard/dist
+    rootDir: dashboard
+    # A plain static build: unpack the saved Eaton replay (made with `make replay-bundle`), then
+    # build the page. No Python here.
+    buildCommand: mkdir -p public && tar -xzf replay.tar.gz -C public && npm ci && npm run build
+    staticPublishPath: dist
     autoDeployTrigger: checksPass
     envVars:
-      - key: OUTRUN_DATASET
-        value: eaton
       - key: VITE_API_URL           # the two services above
         value: https://outrun-api.onrender.com
       - key: VITE_LIVE_URL
