@@ -9,10 +9,19 @@
   height: 100%;
 }
 
+/* Map controls clear the top bar (and the live banner), the right panel and the footer */
+.wrapper :global(.maplibregl-ctrl-top-left) {
+  top: 56px;
+}
+
+.withBanner :global(.maplibregl-ctrl-top-left) {
+  top: 104px;
+}
+
 .horizonControl {
   position: absolute;
-  top: 10px;
-  right: 10px;
+  left: 10px;
+  bottom: 122px;
   display: flex;
   align-items: center;
   gap: 4px;

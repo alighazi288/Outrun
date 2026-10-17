@@ -24,5 +24,18 @@ export interface ReplayManifest {
   end: string;
   step_minutes: number;
   cells: string;
+  bbox?: Bbox;
+  live?: boolean;
+  approximations?: string[];
+  fire_weather?: string[];
+  time_zone?: string;
   steps: ManifestStep[];
+}
+
+/** The dataset's area: south/west/north/east in degrees. */
+export interface Bbox {
+  south: number;
+  west: number;
+  north: number;
+  east: number;
 }

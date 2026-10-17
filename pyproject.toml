@@ -21,6 +21,7 @@ eval = ["pandas>=2.2", "matplotlib>=3.9"]
 [project.scripts]
 outrun-api = "backend.api.main:run"
 outrun-export = "backend.export:main"
+outrun-live = "backend.live:run"
 
 [dependency-groups]
 dev = ["pytest>=8", "httpx>=0.27", "ruff>=0.6"]

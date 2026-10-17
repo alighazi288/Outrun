@@ -11,7 +11,7 @@
   display: flex;
   align-items: center;
   padding: 0 16px;
-  gap: 24px;
+  gap: 16px;
 }
 
 .title {
@@ -80,4 +80,26 @@
   background: var(--surface);
   color: var(--muted);
   border-color: var(--border);
+}
+
+.badgeStale {
+  background: rgba(240, 166, 60, 0.15);
+  color: var(--accent-wait);
+  border-color: rgba(240, 166, 60, 0.4);
+}
+
+.change {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  padding: 3px 9px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.change:hover {
+  color: var(--text);
+  background: var(--surface-hover);
 }

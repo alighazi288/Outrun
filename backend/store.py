@@ -139,6 +139,29 @@ class DataStore:
         self.missing_inputs.append(name)
         return path
 
+    def reload_live_feeds(self) -> None:
+        """A live area pulled new feeds into its folder (backend/area.py refresh_fire): read
+        the fire detections, wind, alerts, the incident's report and the area notes again.
+        People, fleet, shelters and reports added through the API stay as they are."""
+        self.meta = json.loads((self.folder / "meta.json").read_text())
+        self.detections = read_jsonl(self.folder / "detections.jsonl", FireDetection)
+        self.wind = read_jsonl(self.folder / "wind.jsonl", WindForecast)
+        self.orders = read_jsonl(self.folder / "evac_orders.jsonl", EvacOrder)
+        on_file = read_jsonl(self.folder / "fire_reports.jsonl", FireReport, optional=True)
+        added = [r for r in self.reports  # through the API since setup (intake, drills)
+                 if r.id not in {f.id for f in on_file} and not r.id.startswith("nifc_")]
+        self.reports = on_file + added
+
+    def area_info(self) -> dict:
+        """Where the dataset is, and what is approximate there (an area set up on demand
+        lists its approximations; a live area lists the fire weather in effect)."""
+        return {"bbox": self.meta["bbox"], "live": bool(self.meta.get("live")),
+                "approximations": self.meta.get("approximations", []),
+                "fire_weather": self.meta.get("fire_weather", []),
+                "feeds_pulled_at": self.meta.get("feeds_pulled_at"),
+                "incident": self.meta.get("incident"),
+                "time_zone": self.meta.get("time_zone", "America/Los_Angeles")}
+
     @property
     def complete(self) -> bool:
         """Real, with every input built: what judges may see (PRD: no fake data after Oct 11)."""

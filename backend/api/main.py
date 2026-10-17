@@ -108,10 +108,28 @@ class VehicleRun(BaseModel):
     eta_min: list[float] = Field(description="Minutes after t until each stop")
 
 
+LIVE_REFRESH = timedelta(minutes=10)
+
+
+class DrillIn(BaseModel):
+    """A practice fire report for a live area. Always labeled DRILL, never shown as real."""
+
+    lat: float
+    lon: float
+    description: str = Field("brush fire reported", description="What the drill says was seen")
+
+
 def create_app(store: DataStore | None = None, log_path: Path | None = None,
-               geocode: Geocoder = census_geocode, approval: str | None = None) -> FastAPI:
+               geocode: Geocoder = census_geocode, approval: str | None = None,
+               refresh: Callable[[Path, datetime], object] | None = None,
+               now: Callable[[], datetime] = lambda: datetime.now(UTC)) -> FastAPI:
     """approval: "manager" (default: a plan only takes effect once the manager decides) or
-    "auto" (plans approve themselves, like the exported replay). Env OUTRUN_APPROVAL."""
+    "auto" (plans approve themselves, like the exported replay). Env OUTRUN_APPROVAL.
+
+    A live area (meta "live", backend/area.py) runs on the real clock: the clock follows the
+    wall clock (stepping ahead is allowed: that is looking ahead on the forecast), and the
+    first request after the feeds are LIVE_REFRESH old pulls them again with `refresh`
+    (default backend.area.refresh_fire). A host that slept wakes up fresh."""
     store = store or DataStore.from_env()
     approval = approval or os.environ.get("OUTRUN_APPROVAL", "manager")
     if approval not in ("manager", "auto"):
@@ -121,6 +139,19 @@ def create_app(store: DataStore | None = None, log_path: Path | None = None,
     clock = store.make_clock()
     logged_plans: set[str] = set()
     sockets: set[WebSocket] = set()
+    live = bool(store.meta.get("live"))
+    if live and refresh is None:
+        from backend.area import refresh_fire as refresh
+    pulled = [parse_t(store.meta["feeds_pulled_at"])] if live else []
+
+    def follow_wall_clock() -> None:
+        """The latest step at or before the wall clock (never back: a look-ahead stays)."""
+        steps = int((now() - clock.start) / clock.step)
+        wall = min(clock.start + steps * clock.step, clock.end)
+        clock.now = max(clock.now, wall)
+
+    if live:
+        follow_wall_clock()
 
     # The address Orchestrate calls (it's written into the OpenAPI spec). Render sets
     # RENDER_EXTERNAL_URL itself; OUTRUN_PUBLIC_URL overrides it (e.g. for a tunnel).
@@ -137,6 +168,19 @@ def create_app(store: DataStore | None = None, log_path: Path | None = None,
     )
     app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"],
                        allow_headers=["*"])
+
+    if live:
+        @app.middleware("http")
+        async def keep_live(request, call_next):
+            t = now()
+            if t - pulled[0] >= LIVE_REFRESH:
+                pulled[0] = t
+                await asyncio.to_thread(refresh, store.folder, t)
+                store.reload_live_feeds()
+                sim.invalidate()
+                logged_plans.clear()
+            follow_wall_clock()
+            return await call_next(request)
 
     def at(t: datetime | None) -> datetime:
         if t is None:
@@ -351,6 +395,23 @@ def create_app(store: DataStore | None = None, log_path: Path | None = None,
         log.record("report", req)
         await broadcast()
         return report
+
+    if live:
+        @app.post("/drill", operation_id="add_drill_report", status_code=201,
+                  summary="Add a DRILL fire report (practice; never shown as a real fire)")
+        async def add_drill(req: DrillIn) -> FireReport:
+            n = sum(r.id.startswith("drill_") for r in store.reports) + 1
+            report = FireReport(
+                id=f"drill_{n}", lat=req.lat, lon=req.lon,
+                h3=h3.latlng_to_cell(req.lat, req.lon, H3_RES), reported_at=clock.now,
+                description=f"DRILL: {req.description}", location_precision_m=250,
+                source="DRILL: a typed example report, not a real one")
+            store.add_report(report)
+            sim.invalidate()
+            logged_plans.clear()
+            log.record("report", report)
+            await broadcast()
+            return report
 
     @app.post(
         "/decisions",

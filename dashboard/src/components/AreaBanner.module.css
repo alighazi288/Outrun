@@ -1,0 +1,67 @@
+.banner {
+  position: fixed;
+  top: 52px;
+  left: 0;
+  right: 380px;
+  z-index: 9;
+  background: rgba(13, 17, 23, 0.9);
+  border-bottom: 1px solid var(--border);
+  padding: 5px 16px;
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 22px;
+}
+
+.fireName {
+  font-weight: 700;
+  color: var(--accent-fire);
+}
+
+.note,
+.muted {
+  color: var(--muted);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.weather {
+  color: var(--accent-risk);
+  font-weight: 600;
+  font-size: 11px;
+}
+
+.drillTag {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #c084fc;
+  border: 1px solid rgba(192, 132, 252, 0.5);
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+
+.drillBtn {
+  background: transparent;
+  border: 1px solid rgba(192, 132, 252, 0.5);
+  border-radius: 4px;
+  color: #c084fc;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 9px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.armed {
+  background: rgba(192, 132, 252, 0.15);
+}

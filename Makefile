@@ -4,7 +4,7 @@
 -include .env
 export
 
-.PHONY: help install test lint fix check api export view eval arrival-window check-data fixtures openapi fire-reports evac-orders roads dins clean
+.PHONY: help install test lint fix check api live export view live-pull live-fires live-area eval forecast-check arrival-window check-data fixtures openapi fire-reports evac-orders roads dins clean
 
 help:  ## List commands
 	@grep -hE '^[a-z]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-9s %s\n", $$1, $$2}'

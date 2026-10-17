@@ -23,6 +23,8 @@ import {
 import { buildRouteLayer } from "@/layers/routeLayer";
 import { buildVehiclesLayer } from "@/layers/vehicleLayer";
 import type { components } from "@/api-types";
+import { LiveSource } from "@/data/source";
+import { formatDateTime as formatTime } from "@/time";
 import styles from "./OutrunMap.module.css";
 
 type Resident = components["schemas"]["Resident"];
@@ -32,7 +34,7 @@ type Facility = components["schemas"]["Facility"];
 
 const DARK_STYLE = "https://tiles.openfreemap.org/styles/dark";
 
-// Study area bounds: west Altadena to Convention Center shelter
+// Until the data says where it is: west Altadena to the Convention Center shelter.
 const BOUNDS: [[number, number], [number, number]] = [
   [-118.19, 34.135], // SW
   [-118.08, 34.23],  // NE
@@ -46,7 +48,10 @@ export default function OutrunMap({
   onSelectResident?: (id: string | null) => void;
   selectedId?: string | null;
 }) {
-  const { worldState } = useWorld();
+  const { worldState, source, drillArmed, setDrillArmed } = useWorld();
+  const drillRef = useRef(drillArmed);
+  drillRef.current = drillArmed;
+  const area = source.health?.bbox ?? null;
   const mapRef = useRef<maplibregl.Map | null>(null);
   const overlayRef = useRef<MapboxOverlay | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -111,6 +116,12 @@ export default function OutrunMap({
       map.resize();
     });
 
+    map.on("click", (e) => {
+      if (!drillRef.current || !(source instanceof LiveSource)) return;
+      setDrillArmed(false);
+      void source.addDrill(e.lngLat.lat, e.lngLat.lng);
+    });
+
     mapRef.current = map;
     overlayRef.current = overlay;
 
@@ -125,6 +136,25 @@ export default function OutrunMap({
       overlayRef.current = null;
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // A crosshair while the next click places a drill fire
+  useEffect(() => {
+    const canvas = mapRef.current?.getCanvas();
+    if (canvas) canvas.style.cursor = drillArmed ? "crosshair" : "";
+  }, [drillArmed]);
+
+  // Fit the map to the dataset's own area (any place Outrun is set up, not just Altadena)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !area) return;
+    const fit = () =>
+      map.fitBounds(
+        [[area.west, area.south], [area.east, area.north]],
+        { padding: FIT_PADDING, animate: false },
+      );
+    if (map.loaded()) fit();
+    else map.once("load", fit);
+  }, [area?.south, area?.west, area?.north, area?.east]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Build lookup maps from worldState
   const { residentsMap, sheltersMap, vehiclesMap, facilitiesResidentMap } =
@@ -263,7 +293,7 @@ export default function OutrunMap({
   );
 
   return (
-    <div className={styles.wrapper}>
+    <div className={`${styles.wrapper} ${source.health?.live ? styles.withBanner : ""}`}>
       <div ref={containerRef} className={styles.map} />
 
       {/* Horizon toggle */}
@@ -298,7 +328,10 @@ export default function OutrunMap({
 function getTooltipText(obj: Record<string, unknown>): string | null {
   // Fire report
   if ("description" in obj && "reported_at" in obj) {
-    return `📞 ${String(obj.description)}\n${formatTime(String(obj.reported_at))}`;
+    const id = String(obj.id ?? "");
+    const icon = id.startsWith("drill_") ? "🧪" : id.startsWith("nifc_") ? "🔥" : "📞";
+    const kind = id.startsWith("nifc_") ? "\nOfficial report (national incident system)" : "";
+    return `${icon} ${String(obj.description)}${kind}\n${formatTime(String(obj.reported_at))}`;
   }
   // Detection
   if ("source" in obj && "frp_mw" in obj) {
@@ -328,20 +361,4 @@ function getTooltipText(obj: Record<string, unknown>): string | null {
     return `${k}: ${String(obj.area)}\n${formatTime(String(obj.issued_at))}`;
   }
   return null;
-}
-
-function formatTime(iso: string): string {
-  if (!iso) return "";
-  try {
-    return new Date(iso).toLocaleString("en-US", {
-      timeZone: "America/Los_Angeles",
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true,
-    });
-  } catch {
-    return iso;
-  }
 }

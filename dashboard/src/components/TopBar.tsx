@@ -1,16 +1,22 @@
 /**
- * TopBar — four big numbers + data quality badge.
+ * TopBar — mode switch, five big numbers, data badge.
  *
  * Numbers: people known, at risk now, picked up, to fire command, waiting for a vehicle.
  * plan.unreachable is everyone left off this plan: the fire-command subset plus the queue.
- * Badge: green "Real inputs" or red "Fake data: …" based on manifest/worldState.
+ * Badge: the Eaton night: green "Real inputs" or red "Fake data: …"; a live area: "LIVE"
+ * with how long ago the feeds were pulled, and a button to pick another area.
  */
 
 import { useWorld } from "@/context/WorldContext";
+import ModeSwitch from "@/components/ModeSwitch";
+import type { Route } from "@/route";
+import { ago } from "@/time";
 import styles from "./TopBar.module.css";
 
-export default function TopBar() {
-  const { worldState, source } = useWorld();
+const STALE_MIN = 15;  // feeds refresh every 10 min; older than this, the badge turns amber
+
+export default function TopBar({ onRoute }: { onRoute: (route: Route) => void }) {
+  const { worldState, source, route } = useWorld();
 
   const peopleKnown = worldState?.residents.length ?? 0;
   const atRisk = worldState?.risks.filter((r) => r.at_risk).length ?? 0;
@@ -22,11 +28,19 @@ export default function TopBar() {
   let badgeClass = styles.badgeUnknown;
   let badgeText = "Loading…";
   const h = source.health;
-  if (h) {
+  if (route.mode === "live" && h) {
+    const pulled = h.feeds_pulled_at ? new Date(h.feeds_pulled_at).getTime() : 0;
+    const fresh = Date.now() - pulled < STALE_MIN * 60_000;
+    badgeClass = fresh ? styles.badgeReal : styles.badgeStale;
+    badgeText = `LIVE · feeds ${ago(h.feeds_pulled_at)}`;
+  } else if (source.error) {
+    badgeClass = styles.badgeFake;
+    badgeText = "Not connected";
+  } else if (h) {
     const isReal = !h.synthetic && h.fake_inputs.length === 0 && h.missing_inputs.length === 0;
     if (isReal) {
       badgeClass = styles.badgeReal;
-      badgeText = source.mode === "live" ? "Real inputs · manager mode" : "Real inputs";
+      badgeText = route.mode === "manager" ? "Real inputs · manager mode" : "Real inputs";
     } else {
       const issues = [
         h.synthetic ? "synthetic dataset" : null,
@@ -43,6 +57,7 @@ export default function TopBar() {
   return (
     <header className={styles.bar}>
       <div className={styles.title}>Outrun</div>
+      <ModeSwitch route={route} onRoute={onRoute} />
 
       <div className={styles.numbers}>
         <Stat label="Known" value={peopleKnown} />
@@ -61,6 +76,11 @@ export default function TopBar() {
       </div>
 
       <div className={`${styles.badge} ${badgeClass}`}>{badgeText}</div>
+      {route.mode === "live" && (
+        <button className={styles.change} onClick={() => onRoute({ mode: "live", area: null })}>
+          Change area
+        </button>
+      )}
     </header>
   );
 }

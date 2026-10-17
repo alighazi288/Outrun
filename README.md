@@ -59,19 +59,34 @@ Requires [uv](https://docs.astral.sh/uv/) (it installs the right Python) and `ma
 git clone https://github.com/alighazi288/Outrun.git && cd Outrun
 make install    # Python deps
 make check      # lint + all tests (what CI runs)
-make api        # API at http://localhost:8000, interactive docs at /docs
-make export     # precompute the replay frames into replay/
+make api        # the Eaton night's API at http://localhost:8000, interactive docs at /docs
+make live       # the live server at http://localhost:8001: any US area, today's data
+OUTRUN_DATASET=eaton make view   # precompute the Eaton replay, open the dashboard at :5173
 make help       # everything else
 ```
 
-Extras per card: `uv sync --group dev --extra routing` (OR-Tools, OSMnx), `--extra wx` (HRRR wind),
+The dashboard has three modes, switched in its top bar (and kept in the address, e.g.
+`?mode=live&area=pico`):
+
+| Mode | What it shows | Needs |
+|---|---|---|
+| Eaton replay | the real night, Jan 7-8 2025, only what was known at each moment | `make export` |
+| Eaton · manager | the same night on the API; plans wait for the manager's decision | `make api` |
+| Live | today's real US wildfires: pick one (or any place) and Outrun sets the area up from national data in about a minute, then plans on the real clock | `make live`, `FIRMS_MAP_KEY` and `CENSUS_API_KEY` in `.env` |
+
+When developing, the dashboard finds the API and the live server on localhost. A built dashboard
+reads `VITE_API_URL` and `VITE_LIVE_URL` at build time. Live areas label every estimate and
+example (people from Census counts, an example fleet and shelter, straight-line road times) and
+every drill.
+
+Extras per card: `uv sync --group dev --extra routing` (OSMnx, OR-Tools), `--extra wx` (HRRR wind),
 `--extra geo`, `--extra eval`.
 
 ## Layout
 
 | Path | What goes here |
 |---|---|
-| `backend/` | Shared data formats (`schemas.py`), every assumed number (`assumptions.py`), replay clock, who-is-known rule, FastAPI + OpenAPI tools |
+| `backend/` | Shared data formats (`schemas.py`), every assumed number (`assumptions.py`), replay clock, who-is-known rule, FastAPI + OpenAPI tools, live feeds (`feeds.py`), any-area setup (`area.py`), live server (`live.py`) |
 | `engines/` | Fire nowcast, risk, travel time, router with the driver-safety rule |
 | `agents/` | watsonx Orchestrate agent YAML (Intake, Dispatch) |
 | `dashboard/` | React map. The judged demo plays saved frames |
@@ -81,7 +96,7 @@ Extras per card: `uv sync --group dev --extra routing` (OR-Tools, OSMnx), `--ext
 | `tests/` | Contract tests every folder must pass (no hindsight, driver safety, never dropped) |
 | `notebooks/` | Exploration |
 | `docs/` | PRD, architecture, team, eval spec, how it works, playbook, submission |
-| `bob_sessions/` | IBM Bob session screenshots (required for judging) |
+| `bob_sessions/` | IBM Bob session screenshots |
 | `DATA_SOURCES.md` | Every public site used, with attribution |
 
 

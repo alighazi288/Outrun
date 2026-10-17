@@ -1,0 +1,135 @@
+.page {
+  position: fixed;
+  inset: 52px 0 0 0;
+  overflow-y: auto;
+  background: var(--bg);
+}
+
+.column {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 28px 16px 60px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.h1 {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.h2 {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.lead,
+.small {
+  color: var(--muted);
+}
+
+.small {
+  font-size: 12px;
+  margin: -4px 0 8px;
+}
+
+.error {
+  color: var(--accent-risk);
+}
+
+.busy {
+  color: var(--accent-wait);
+}
+
+.row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(140px, 1.1fr) 1.6fr auto;
+  gap: 12px;
+  align-items: center;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 9px 12px;
+  margin-bottom: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.row:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+.row:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.place {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.flag {
+  color: var(--accent-risk);
+  font-weight: 700;
+}
+
+.form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.form input {
+  flex: 1;
+  min-width: 140px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+.form button {
+  background: var(--accent-fire);
+  border: none;
+  border-radius: 6px;
+  color: #0d1117;
+  font-weight: 700;
+  padding: 8px 16px;
+  cursor: pointer;
+}
+
+@media (max-width: 640px) {
+  .row {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}

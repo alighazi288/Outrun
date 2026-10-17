@@ -16,6 +16,7 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useWorld } from "@/context/WorldContext";
+import { formatClock } from "@/time";
 import type { components } from "@/api-types";
 import styles from "./RightPanel.module.css";
 
@@ -505,7 +506,7 @@ export default function RightPanel({
   const plan = worldState.plan;
   const isLive = source.mode === "live";
   const isAwaiting = worldState.plan_status === "awaiting_decision";
-  const apiUrl = isLive ? (import.meta.env.VITE_API_URL as string) : "";
+  const apiUrl = source.apiUrl;
 
   const residentsMap = new Map<string, Resident>(
     worldState.residents.map((r) => [r.id, r as Resident])
@@ -542,10 +543,7 @@ export default function RightPanel({
         {worldState.plan_takes_effect_at && (
           <span className={styles.effectTime}>
             Takes effect:{" "}
-            {new Date(worldState.plan_takes_effect_at).toLocaleTimeString(
-              "en-US",
-              { timeZone: "America/Los_Angeles", hour: "numeric", minute: "2-digit" }
-            )}
+            {formatClock(worldState.plan_takes_effect_at)}
           </span>
         )}
       </div>

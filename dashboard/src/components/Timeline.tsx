@@ -2,16 +2,18 @@
  * Timeline component.
  *
  * Replay mode: range slider over 73 steps + play/pause.
- * Live mode: "Next 10 min" and "Reset" buttons.
+ * Manager mode (the Eaton night on the API): "Next 10 min" and "Reset".
+ * A live area: the clock is the real time; "Look ahead 10 min" steps forward on the
+ * forecast, "Back to now" returns to the real time.
  */
 
 import { useWorld } from "@/context/WorldContext";
-import { ReplaySource } from "@/data/source";
 import styles from "./Timeline.module.css";
 
 export default function Timeline() {
-  const { source, manifest } = useWorld();
+  const { source, manifest, route } = useWorld();
   const isReplay = source.mode === "replay";
+  const isLiveArea = route.mode === "live";
 
   return (
     <div className={styles.bar}>
@@ -64,17 +66,14 @@ export default function Timeline() {
         </div>
       ) : (
         <div className={styles.liveControls}>
-          <button
-            className={styles.btn}
-            onClick={() => void (source as ReplaySource).step(1)}
-          >
-            Next 10 min
+          <button className={styles.btn} onClick={() => void source.step(1)}>
+            {isLiveArea ? "Look ahead 10 min" : "Next 10 min"}
           </button>
           <button
             className={`${styles.btn} ${styles.btnSecondary}`}
             onClick={() => void source.reset()}
           >
-            Reset
+            {isLiveArea ? "Back to now" : "Reset"}
           </button>
         </div>
       )}

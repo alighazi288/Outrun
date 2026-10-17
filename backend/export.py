@@ -78,6 +78,7 @@ def main() -> None:
         "end": clock.end.isoformat(),
         "step_minutes": int(clock.step.total_seconds() // 60),
         "cells": "cells.geojson",
+        **store.area_info(),
         "steps": steps,
     }
     (args.out / "manifest.json").write_text(json.dumps(manifest, indent=2))
