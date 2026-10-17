@@ -44,6 +44,8 @@ export interface HealthInfo {
   fire_weather: string[];
   /** When the live feeds were last pulled. */
   feeds_pulled_at: string | null;
+  /** Feeds that failed on the last pull ("wind: ..."): their last good data is kept. */
+  feed_problems: string[];
   /** The real fire the area was set up around, if any. */
   incident: Incident | null;
   /** IANA time zone of the area. */
@@ -73,6 +75,7 @@ function healthFrom(h: Record<string, unknown>): HealthInfo {
     live: h["live"] === true,
     approximations: names(h["approximations"]),
     fire_weather: names(h["fire_weather"]),
+    feed_problems: names(h["feed_problems"]),
     feeds_pulled_at: typeof h["feeds_pulled_at"] === "string" ? h["feeds_pulled_at"] : null,
     incident: (h["incident"] as Incident | null | undefined) ?? null,
     time_zone: tz,

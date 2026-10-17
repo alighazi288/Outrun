@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import shutil
 from collections.abc import Callable
 from pathlib import Path
 
@@ -81,7 +82,10 @@ def create_live_app(root: Path = area.AREA_ROOT,
     if root.exists():
         for folder in sorted(root.iterdir()):
             meta = folder / "meta.json"
-            if meta.exists() and json.loads(meta.read_text()).get("live"):
+            if not meta.exists():
+                continue
+            info = json.loads(meta.read_text())
+            if info.get("live") and "feeds_pulled_at" in info:  # skip a half-built area
                 mount(folder)
 
     @app.get("/", include_in_schema=False)
@@ -117,7 +121,12 @@ def create_live_app(root: Path = area.AREA_ROOT,
         slug = area.slug(name)
         if slug in areas:
             return describe(slug)
-        folder = await asyncio.to_thread(setup, lat, lon, name, fire=fire)
+        try:
+            folder = await asyncio.to_thread(setup, lat, lon, name, fire=fire)
+        except Exception as e:  # a public data service is down or refusing us right now
+            shutil.rmtree(root / slug, ignore_errors=True)
+            raise HTTPException(503, f"{e}. A public data service may be busy: try again "
+                                "in a minute.") from e
         mount(folder)
         return describe(folder.name)
 

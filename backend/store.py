@@ -159,6 +159,7 @@ class DataStore:
                 "approximations": self.meta.get("approximations", []),
                 "fire_weather": self.meta.get("fire_weather", []),
                 "feeds_pulled_at": self.meta.get("feeds_pulled_at"),
+                "feed_problems": self.meta.get("feed_problems", []),
                 "incident": self.meta.get("incident"),
                 "time_zone": self.meta.get("time_zone", "America/Los_Angeles")}
 

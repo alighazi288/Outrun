@@ -67,6 +67,12 @@ export default function AreaBanner() {
       {h.fire_weather.map((w) => (
         <div key={w} className={styles.weather}>⚠ {w}</div>
       ))}
+      {h.feed_problems.length > 0 && (
+        <div className={styles.muted}>
+          Couldn't refresh {h.feed_problems.map((p) => p.split(":")[0]).join(", ")} just now:
+          showing the last good data, trying again in 2 min.
+        </div>
+      )}
     </div>
   );
 }

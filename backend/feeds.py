@@ -8,8 +8,10 @@ source made it (observed_at, run_at, issued_at), so the no-hindsight rules still
 
 - fires():  NASA FIRMS area API, near-real-time. VIIRS on three satellites (375 m pixels) and
   GOES (2 km pixels, every few minutes).
-- wind():   Open-Meteo's copy of NOAA's HRRR model, a small grid of points over the area,
-  stamped with the model run's start and availability times.
+- wind():   the National Weather Service's official hourly forecast (its forecast grid, which
+  blends NOAA models including HRRR) at a few points over the area, stamped with the time
+  the forecast was updated. Open-Meteo's copy of HRRR is the fallback: free hosting shares
+  internet addresses, and Open-Meteo's per-address limit is often used up there.
 - alerts(): the FEMA IPAWS public feed (county evacuation orders and warnings go out on it, as
   they did for Eaton) and the National Weather Service (fire weather). Only evacuation alerts
   become EvacOrders; a Red Flag Warning is context for the manager, not an order.
@@ -24,6 +26,7 @@ import csv
 import io
 import json
 import os
+import re
 import urllib.request
 import xml.etree.ElementTree as ET
 from collections.abc import Callable
@@ -50,6 +53,7 @@ WIND_GRID = 3  # points per side over the area (HRRR cells are 3 km)
 WIND_HOURS = 4
 
 NWS_POINT = "https://api.weather.gov/alerts/active?point={lat:.4f},{lon:.4f}"
+NWS_POINTS = "https://api.weather.gov/points/{lat:.4f},{lon:.4f}"
 IPAWS_RECENT = "https://apps.fema.gov/IPAWSOPEN_EAS_SERVICE/rest/public/recent/{since}"
 CAP = "{urn:oasis:names:tc:emergency:cap:1.2}"
 FIRE_WEATHER = {"Red Flag Warning", "Fire Weather Watch", "Fire Warning", "Extreme Fire Danger"}
@@ -107,12 +111,75 @@ def parse_firms_csv(text: str, fetched_at: datetime) -> list[FireDetection]:
 
 
 # --------------------------------------------------------------------------------------
-# Wind (NOAA HRRR via Open-Meteo)
+# Wind and time zone (National Weather Service; Open-Meteo as the fallback)
 # --------------------------------------------------------------------------------------
 
 
-def wind(box: dict, get: Get = http_get) -> list[WindForecast]:
-    """The next WIND_HOURS of 10 m wind and gusts on a WIND_GRID x WIND_GRID grid."""
+class FeedError(RuntimeError):
+    """A source we need didn't answer (both the main one and its fallback)."""
+
+
+def wind(box: dict, now: datetime | None = None, get: Get = http_get) -> list[WindForecast]:
+    """Hourly 10 m wind and gusts, from an hour ago to WIND_HOURS ahead, at a few points over
+    the area: the National Weather Service forecast, else Open-Meteo's HRRR."""
+    now = now or datetime.now(UTC)
+    out: list[WindForecast] = []
+    for lat, lon in _sample_points(box):
+        try:
+            grid = json.loads(get(NWS_POINTS.format(lat=lat, lon=lon)))["properties"]
+            out += parse_nws_grid(get(grid["forecastGridData"]), lat, lon, now)
+        except (OSError, KeyError, ValueError):
+            continue
+    if out:
+        return out
+    try:
+        return open_meteo_wind(box, get)
+    except (OSError, KeyError, ValueError) as e:
+        raise FeedError(f"wind forecast unavailable ({e})") from e
+
+
+def parse_nws_grid(text: str, lat: float, lon: float, now: datetime) -> list[WindForecast]:
+    """NWS forecast grid -> one WindForecast per hour. Values come as intervals
+    ("2026-10-17T17:00:00+00:00/PT5H", km/h); each hour inside one gets its value."""
+    p = json.loads(text)["properties"]
+    updated = datetime.fromisoformat(p["updateTime"])
+    lo, hi = now - timedelta(hours=1), now + timedelta(hours=WIND_HOURS)
+    series = {k: _hourly(p[k]["values"], lo, hi) for k in ("windSpeed", "windDirection")}
+    gusts = _hourly(p.get("windGust", {}).get("values", []), lo, hi)
+    out = []
+    for hour, speed_kmh in sorted(series["windSpeed"].items()):
+        direction = series["windDirection"].get(hour)
+        if speed_kmh is None or direction is None:
+            continue
+        gust = gusts.get(hour)
+        out.append(WindForecast(
+            run_at=updated, issued_at=updated, valid_at=hour, lat=round(lat, 4),
+            lon=round(lon, 4), speed_ms=round(speed_kmh / 3.6, 2),
+            dir_from_deg=float(direction) % 360,
+            gust_ms=round(gust / 3.6, 2) if gust is not None else None,
+        ))
+    return out
+
+
+def _hourly(values: list[dict], lo: datetime, hi: datetime) -> dict[datetime, float]:
+    """Interval values -> {each whole hour in [lo, hi]: value}."""
+    out: dict[datetime, float] = {}
+    for v in values:
+        start_text, duration = v["validTime"].split("/")
+        start = datetime.fromisoformat(start_text)
+        m = re.fullmatch(r"P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?)?", duration)
+        days, hours, minutes = (int(x or 0) for x in m.groups()) if m else (0, 1, 0)
+        end = start + timedelta(days=days, hours=hours, minutes=minutes)
+        t = start
+        while t < end:
+            if lo <= t <= hi:
+                out[t] = v["value"]
+            t += timedelta(hours=1)
+    return out
+
+
+def open_meteo_wind(box: dict, get: Get = http_get) -> list[WindForecast]:
+    """Fallback: the next WIND_HOURS of HRRR wind on a WIND_GRID x WIND_GRID grid."""
     lats = [box["south"] + (box["north"] - box["south"]) * (i + 0.5) / WIND_GRID
             for i in range(WIND_GRID)]
     lons = [box["west"] + (box["east"] - box["west"]) * (j + 0.5) / WIND_GRID
@@ -152,10 +219,17 @@ def parse_open_meteo(forecast: str, meta: str) -> list[WindForecast]:
 
 
 def time_zone(lat: float, lon: float, get: Get = http_get) -> str:
-    """The IANA time zone at a point (Open-Meteo), e.g. "America/Chicago", for showing an
-    area's times the way people there read their clocks."""
-    query = f"latitude={lat:.4f}&longitude={lon:.4f}&timezone=auto&current=temperature_2m"
-    return json.loads(get(f"{OPEN_METEO}?{query}"))["timezone"]
+    """The IANA time zone at a point, e.g. "America/Chicago", for showing an area's times
+    the way people there read their clocks: the NWS, else Open-Meteo, else UTC."""
+    try:
+        return json.loads(get(NWS_POINTS.format(lat=lat, lon=lon)))["properties"]["timeZone"]
+    except (OSError, KeyError, ValueError):
+        pass
+    try:
+        query = f"latitude={lat:.4f}&longitude={lon:.4f}&timezone=auto&current=temperature_2m"
+        return json.loads(get(f"{OPEN_METEO}?{query}"))["timezone"]
+    except (OSError, KeyError, ValueError):
+        return "UTC"
 
 
 # --------------------------------------------------------------------------------------
@@ -268,10 +342,10 @@ def main() -> None:
                  if found else ""))
     else:
         print("  fire detections: skipped, FIRMS_MAP_KEY is not set")
-    w = wind(box)
+    w = wind(box, now)
     if w:
         latest = max(w, key=lambda r: r.valid_at)
-        print(f"  wind: HRRR run {w[0].run_at:%H:%M} UTC, available {w[0].issued_at:%H:%M}; "
+        print(f"  wind: forecast issued {w[0].issued_at:%H:%M} UTC; "
               f"{len(w)} values; at {latest.valid_at:%H:%M} UTC {latest.speed_ms:.1f} m/s "
               f"from {latest.dir_from_deg:.0f}°")
     orders, weather = alerts(box, now)

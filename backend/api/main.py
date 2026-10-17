@@ -11,6 +11,7 @@ Tests build their own app with create_app(store=...), so nothing runs at import 
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
@@ -109,6 +110,7 @@ class VehicleRun(BaseModel):
 
 
 LIVE_REFRESH = timedelta(minutes=10)
+LIVE_RETRY = timedelta(minutes=2)  # after a feed failed to refresh
 
 
 class DrillIn(BaseModel):
@@ -175,10 +177,17 @@ def create_app(store: DataStore | None = None, log_path: Path | None = None,
             t = now()
             if t - pulled[0] >= LIVE_REFRESH:
                 pulled[0] = t
-                await asyncio.to_thread(refresh, store.folder, t)
-                store.reload_live_feeds()
-                sim.invalidate()
-                logged_plans.clear()
+                try:
+                    summary = await asyncio.to_thread(refresh, store.folder, t)
+                except Exception:  # keep serving the last good data; try again soon
+                    logging.getLogger("outrun").exception("live refresh failed")
+                    pulled[0] = t - LIVE_REFRESH + LIVE_RETRY
+                else:
+                    if (summary or {}).get("problems"):  # a feed kept its last good data
+                        pulled[0] = t - LIVE_REFRESH + LIVE_RETRY
+                    store.reload_live_feeds()
+                    sim.invalidate()
+                    logged_plans.clear()
             follow_wall_clock()
             return await call_next(request)
 

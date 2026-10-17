@@ -4,7 +4,10 @@ no network."""
 from __future__ import annotations
 
 import json
+import urllib.error
 from datetime import UTC, datetime, timedelta
+
+import pytest
 
 from backend import feeds
 
@@ -112,6 +115,55 @@ def test_alerts_keep_orders_touching_the_area_and_list_fire_weather():
     assert weather == ["Red Flag Warning: Red Flag Warning until Fri"]
 
 
+NWS_GRID = json.dumps({"properties": {
+    "updateTime": "2026-10-14T19:45:00+00:00",
+    "windSpeed": {"uom": "wmoUnit:km_h-1", "values": [
+        {"validTime": "2026-10-14T19:00:00+00:00/PT3H", "value": 36.0},
+        {"validTime": "2026-10-14T22:00:00+00:00/PT1H", "value": 18.0}]},
+    "windDirection": {"values": [{"validTime": "2026-10-14T19:00:00+00:00/PT4H", "value": 45}]},
+    "windGust": {"values": [{"validTime": "2026-10-14T19:00:00+00:00/PT2H", "value": 54.0}]},
+}})
+
+
+def _busy(url):
+    raise urllib.error.HTTPError(url, 429, "Too Many Requests", None, None)
+
+
+def _nws(url):
+    if "/points/" in url:
+        return json.dumps({"properties": {"forecastGridData": "https://api.weather.gov/grid",
+                                          "timeZone": "America/Denver"}})
+    if url == "https://api.weather.gov/grid":
+        return NWS_GRID
+    return _busy(url)
+
+
+def test_nws_wind_is_hourly_in_metres_per_second_from_its_update_time():
+    rows = feeds.parse_nws_grid(NWS_GRID, 34.2, -118.1, NOW)
+    assert [(r.valid_at.hour, r.speed_ms, r.gust_ms) for r in rows] == [
+        (20, 10.0, 15.0), (21, 10.0, None), (22, 5.0, None)]
+    assert {r.issued_at for r in rows} == {datetime(2026, 10, 14, 19, 45, tzinfo=UTC)}
+    assert {r.dir_from_deg for r in rows} == {45.0}
+
+
+def test_wind_comes_from_the_nws_and_never_needs_open_meteo():
+    rows = feeds.wind(BOX, NOW, get=_nws)  # Open-Meteo refuses us (429)
+    assert len(rows) == 3 * len(feeds._sample_points(BOX))
+
+
+def test_wind_falls_back_to_open_meteo_then_says_it_is_unavailable():
+    def open_meteo(url):
+        if "open-meteo" not in url:
+            return _busy(url)
+        return META if "meta.json" in url else OPEN_METEO
+
+    assert feeds.wind(BOX, NOW, get=open_meteo) == feeds.parse_open_meteo(OPEN_METEO, META)
+    with pytest.raises(feeds.FeedError):
+        feeds.wind(BOX, NOW, get=_busy)
+
+
 def test_an_area_reads_its_own_time_zone():
-    assert feeds.time_zone(34.6, -91.4, get=lambda url: json.dumps(
-        {"timezone": "America/Chicago"})) == "America/Chicago"
+    assert feeds.time_zone(39.7, -105.0, get=_nws) == "America/Denver"
+    assert feeds.time_zone(34.6, -91.4, get=lambda url: _busy(url) if "weather.gov" in url
+                           else json.dumps({"timezone": "America/Chicago"})) == "America/Chicago"
+    assert feeds.time_zone(34.6, -91.4, get=_busy) == "UTC", "never a reason to fail setup"

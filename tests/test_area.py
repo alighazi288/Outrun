@@ -5,7 +5,11 @@ from __future__ import annotations
 
 import json
 import random
+import urllib.error
 import urllib.parse
+from datetime import UTC, datetime
+
+import pytest
 
 from backend import area
 from backend.census import TOTAL_POPULATION, VARIABLES, api_name
@@ -92,6 +96,46 @@ def test_the_example_shelter_is_a_high_school_outside_the_area_and_says_so():
     s = area.example_shelter(34.19, -118.13, 4.0, get=lambda url: json.dumps(schools))
     assert s.name == "La Canada High (example shelter)"
     assert s.source.startswith("EXAMPLE")
+
+
+def test_a_rural_area_searches_further_for_a_high_school():
+    far = {"features": [{"attributes": {"NCESSCH": "9", "NAME": "County High", "CITY": "Far",
+                                        "LAT": 34.50, "LON": -118.13}}]}
+    calls = []
+
+    def get(url):
+        calls.append(url)
+        return json.dumps(far if len(calls) == 2 else {"features": []})
+
+    assert area.example_shelter(34.19, -118.13, 4.0, get=get).name.startswith("County High")
+    assert len(calls) == 2
+    assert area.example_shelter(34.19, -118.13, 4.0,
+                                get=lambda url: json.dumps({"features": []})) is None
+
+
+def _busy(url):
+    raise urllib.error.HTTPError(url, 429, "Too Many Requests", None, None)
+
+
+def test_a_feed_that_fails_keeps_its_last_good_data(tmp_path, monkeypatch):
+    monkeypatch.delenv("FIRMS_MAP_KEY", raising=False)
+    meta = {"bbox": BOX, "feeds_pulled_at": "2026-10-14T20:00:00+00:00",
+            "fire_weather": ["Red Flag Warning: test"]}
+    (tmp_path / "meta.json").write_text(json.dumps(meta))
+    (tmp_path / "wind.jsonl").write_text("last good wind\n")
+    now = datetime(2026, 10, 14, 20, 30, tzinfo=UTC)
+    summary = area.refresh_fire(tmp_path, now, get=_busy)
+    assert [p.split(":")[0] for p in summary["problems"]] == ["wind", "alerts"]
+    assert (tmp_path / "wind.jsonl").read_text() == "last good wind\n"
+    after = json.loads((tmp_path / "meta.json").read_text())
+    assert after["fire_weather"] == ["Red Flag Warning: test"] and after["feed_problems"]
+
+
+def test_setting_up_without_any_wind_is_an_error_not_a_still_day(tmp_path, monkeypatch):
+    monkeypatch.delenv("FIRMS_MAP_KEY", raising=False)
+    (tmp_path / "meta.json").write_text(json.dumps({"bbox": BOX}))
+    with pytest.raises(area.feeds.FeedError):
+        area.refresh_fire(tmp_path, datetime(2026, 10, 14, 20, 30, tzinfo=UTC), get=_busy)
 
 
 def test_the_example_fleet_is_the_baseline_at_the_shelter():

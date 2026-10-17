@@ -69,6 +69,30 @@ def test_setting_up_a_real_fire_mounts_its_area(live):
     assert live.post("/areas", json={"fire_id": "nope"}).status_code == 404
 
 
+def test_a_setup_that_fails_says_try_again_and_leaves_nothing_behind(tmp_path):
+    root = tmp_path / "live"
+
+    def setup(lat, lon, name, fire=None):
+        (root / "busy-town").mkdir(parents=True)
+        (root / "busy-town" / "meta.json").write_text("{}")
+        raise OSError("HTTP Error 429: Too Many Requests")
+
+    client = TestClient(create_live_app(root=root, fires=lambda days: [], setup=setup))
+    r = client.post("/areas", json={"lat": 34.2, "lon": -118.1, "name": "Busy Town"})
+    assert r.status_code == 503 and "try again" in r.json()["detail"]
+    assert not (root / "busy-town").exists()
+    assert client.get("/areas").json() == []
+
+
+def test_a_half_built_area_is_not_served(tmp_path):
+    root = tmp_path / "live"
+    root.mkdir()
+    meta = json.loads((make_area(root, "half").joinpath("meta.json")).read_text())
+    del meta["feeds_pulled_at"]
+    (root / "half" / "meta.json").write_text(json.dumps(meta))
+    assert TestClient(create_live_app(root=root)).get("/areas").json() == []
+
+
 def test_a_drill_is_always_labeled(live):
     r = live.post("/areas/demo/drill", json={"lat": 34.2, "lon": -118.1})
     assert r.status_code == 201
@@ -89,6 +113,24 @@ def test_feeds_are_pulled_again_once_they_are_10_minutes_old(tmp_path):
     client.get("/health")
     client.get("/health")
     assert calls == [clock[0]], "pulled once, then fresh again"
+
+
+def test_a_failed_refresh_keeps_the_area_up_and_tries_again_in_2_minutes(tmp_path):
+    folder = make_area(tmp_path)
+    calls, clock = [], [NOW + timedelta(minutes=11)]
+
+    def refresh(f, t):
+        calls.append(t)
+        raise OSError("HTTP Error 429: Too Many Requests")
+
+    client = TestClient(create_app(store=DataStore(folder), refresh=refresh,
+                                   now=lambda: clock[0]))
+    assert client.get("/health").status_code == 200
+    assert client.get("/state").status_code == 200, "the last good data is still served"
+    assert len(calls) == 1
+    clock[0] += timedelta(minutes=2)
+    client.get("/health")
+    assert len(calls) == 2
 
 
 def test_a_live_area_never_simulates_help_calls(tmp_path):

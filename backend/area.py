@@ -320,8 +320,18 @@ def open_shelters(lat: float, lon: float, get: feeds.Get = feeds.http_get) -> li
 def example_shelter(lat: float, lon: float, radius_km: float,
                     get: feeds.Get = feeds.http_get) -> Shelter | None:
     """No shelter open: an EXAMPLE drop-off at a public high school (NCES public school
-    locations), the nearest one outside the area if there is one."""
-    d = radius_km * 4 / 111.0
+    locations), the nearest one outside the area if there is one. The search widens (rural
+    areas can have none for 20 km) up to SHELTER_SEARCH_KM."""
+    for half_km in (radius_km * 4, SHELTER_SEARCH_KM / 2, SHELTER_SEARCH_KM):
+        found = _high_school(lat, lon, radius_km, half_km, get)
+        if found:
+            return found
+    return None
+
+
+def _high_school(lat: float, lon: float, radius_km: float, half_km: float,
+                 get: feeds.Get) -> Shelter | None:
+    d = half_km / 111.0
     query = urllib.parse.urlencode({
         "geometry": f"{lon - d * 1.3},{lat - d},{lon + d * 1.3},{lat + d}",
         "geometryType": "esriGeometryEnvelope", "inSR": 4326,
@@ -367,15 +377,33 @@ def refresh_fire(folder: Path, now: datetime, get: feeds.Get = feeds.http_get) -
     """Pull today's detections, wind and alerts into the area's folder. Returns a summary."""
     meta = json.loads((folder / "meta.json").read_text())
     box = meta["bbox"]
+    first = "feeds_pulled_at" not in meta
+    problems: list[str] = []
+
+    def pull(name: str, fn):
+        """Run one feed. If it fails, keep that feed's last good files and say so."""
+        try:
+            return fn()
+        except (OSError, ValueError, KeyError, RuntimeError) as e:
+            problems.append(f"{name}: {e}")
+            return None
+
     if meta.get("incident"):
-        _follow_incident(folder, meta, now, get)
+        pull("fire status", lambda: _follow_incident(folder, meta, now, get))
     key = os.environ.get("FIRMS_MAP_KEY")
-    detections = feeds.fires(box, key, now, get=get) if key else []
-    wind = feeds.wind(box, get=get)
-    orders, weather = feeds.alerts(box, now, get=get)
-    write_jsonl(folder / "detections.jsonl", detections)
-    write_jsonl(folder / "wind.jsonl", wind)
-    write_jsonl(folder / "evac_orders.jsonl", orders)
+    detections = pull("satellites", lambda: feeds.fires(box, key, now, get=get) if key else [])
+    wind = pull("wind", lambda: feeds.wind(box, now, get=get))
+    alerts = pull("alerts", lambda: feeds.alerts(box, now, get=get))
+    if first and not wind:
+        raise feeds.FeedError("no wind forecast for this area right now"
+                              + (f" ({problems[-1]})" if problems else ""))
+    if detections is not None or first:
+        write_jsonl(folder / "detections.jsonl", detections or [])
+    if wind:
+        write_jsonl(folder / "wind.jsonl", wind)
+    orders, weather = alerts if alerts is not None else ([], meta.get("fire_weather", []))
+    if alerts is not None or first:
+        write_jsonl(folder / "evac_orders.jsonl", orders)
     if "replay" not in meta:  # set once, at setup: refreshing never moves the clock
         start = (now - timedelta(hours=WINDOW_PAST_H)).replace(
             minute=now.minute // 10 * 10, second=0, microsecond=0)
@@ -385,13 +413,14 @@ def refresh_fire(folder: Path, now: datetime, get: feeds.Get = feeds.http_get) -
     meta.update({
         "fire_weather": weather,
         "feeds_pulled_at": now.isoformat(),
+        "feed_problems": problems,  # shown to the manager; the last good data is kept
         "feeds": {"satellite": "NASA FIRMS (VIIRS, GOES)" if key else "none: no FIRMS_MAP_KEY",
-                  "wind": "NOAA HRRR via Open-Meteo",
+                  "wind": "NWS forecast grid (Open-Meteo HRRR if NWS is down)",
                   "alerts": "FEMA IPAWS public feed; NWS"},
     })
     (folder / "meta.json").write_text(json.dumps(meta, indent=2) + "\n")
-    return {"detections": len(detections), "wind": len(wind), "orders": len(orders),
-            "fire_weather": weather}
+    return {"detections": len(detections or []), "wind": len(wind or []),
+            "orders": len(orders), "fire_weather": weather, "problems": problems}
 
 
 # --------------------------------------------------------------------------------------
@@ -463,10 +492,14 @@ def setup(lat: float, lon: float, name: str, radius_km: float = RADIUS_KM,
     if not shelters:
         example = example_shelter(lat, lon, radius_km, get)
         shelters = [example] if example else []
-        notes.append("No FEMA shelter is open nearby: the shelter is an EXAMPLE, labeled.")
+        notes.append("No FEMA shelter is open nearby: the shelter is an EXAMPLE, labeled."
+                     if example else
+                     f"No open shelter or high school within {SHELTER_SEARCH_KM:g} km: nobody "
+                     "can be routed until the county names a drop-off point.")
     vehicles = example_fleet(shelters[0]) if shelters else []
-    notes.append("Fleet: an EXAMPLE fleet (4 wheelchair vans, 4 ambulances, 11 buses); the "
-                 "county loads its own.")
+    if vehicles:
+        notes.append("Fleet: an EXAMPLE fleet (4 wheelchair vans, 4 ambulances, 11 buses); "
+                     "the county loads its own.")
 
     meta = {
         "name": slug(name), "synthetic": False, "live": True,
