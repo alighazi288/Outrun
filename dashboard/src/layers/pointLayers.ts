@@ -51,19 +51,24 @@ export function buildDetectionsLayer(detections: FireDetection[]) {
 
 export function buildFacilitiesLayer(
   facilities: Facility[],
-  _residentsByFacility: Map<string, number>
+  residentsByFacility: Map<string, number>
 ) {
+  // Sized in screen pixels by licensed places, so even a 6-bed home is big enough to hover.
   return new ScatterplotLayer<Facility>({
     id: "facilities",
     data: facilities,
     getPosition: (d) => [d.lon, d.lat],
-    getRadius: (d) => 20 + Math.sqrt(d.licensed_capacity) * 6,
-    getFillColor: [26, 188, 156, 180],
+    getRadius: (d) => 5 + Math.sqrt(d.licensed_capacity) * 0.55,
+    getFillColor: (d) =>
+      (residentsByFacility.get(d.id) ?? 1) > 0
+        ? [26, 188, 156, 180]
+        : [26, 188, 156, 60], // everyone picked up: faded
     getLineColor: [26, 188, 156, 255],
     stroked: true,
     lineWidthMinPixels: 2,
     pickable: true,
-    radiusUnits: "meters",
+    radiusUnits: "pixels",
+    updateTriggers: { getFillColor: [residentsByFacility] },
   });
 }
 
@@ -100,7 +105,9 @@ export function buildResidentsLayer(
   );
 
   const picked = residents.filter((r) => r.id in pickedUp);
-  const open = residents.filter((r) => !(r.id in pickedUp));
+  // Care-home residents sit on the home's own point: the home answers the hover for them
+  const open = residents.filter((r) => !(r.id in pickedUp) && !r.facility_id);
+  const atHomes = residents.filter((r) => !(r.id in pickedUp) && r.facility_id);
 
   const pickedLayer = new ScatterplotLayer<Resident>({
     id: "residents-picked-up",
@@ -142,7 +149,9 @@ export function buildResidentsLayer(
     },
   });
 
-  return [pickedLayer, openLayer];
+  const atHomesLayer = openLayer.clone({ id: "residents-at-care-homes", data: atHomes, pickable: false });
+
+  return [pickedLayer, atHomesLayer, openLayer];
 }
 
 // ─── Shelters (white dots) ────────────────────────────────────────────────────

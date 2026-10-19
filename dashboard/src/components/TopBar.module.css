@@ -27,6 +27,8 @@
   display: flex;
   gap: 20px;
   flex: 1;
+  min-width: 0; /* on a narrow screen the numbers give way, never the badge */
+  overflow: hidden;
 }
 
 .stat {
@@ -48,6 +50,14 @@
   text-transform: uppercase;
   letter-spacing: 0.06em;
   margin-top: 1px;
+  white-space: nowrap;
+}
+
+@media (max-width: 1320px) {
+  .bar { gap: 12px; }
+  .numbers { gap: 12px; }
+  .statValue { font-size: 18px; }
+  .statLabel { font-size: 9px; letter-spacing: 0.03em; }
 }
 
 .accentRisk { color: var(--accent-risk); }

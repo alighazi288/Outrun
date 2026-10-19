@@ -14,14 +14,15 @@
   top: 56px;
 }
 
-.withBanner :global(.maplibregl-ctrl-top-left) {
+.withBanner :global(.maplibregl-ctrl-top-left),
+.withBanner .horizonControl {
   top: 104px;
 }
 
 .horizonControl {
   position: absolute;
-  left: 10px;
-  bottom: 122px;
+  left: 52px;
+  top: 56px;
   display: flex;
   align-items: center;
   gap: 4px;
