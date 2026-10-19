@@ -30,6 +30,28 @@ Add a row the moment you start using a new source. Replace every `TODO` with the
 | Map grid | [Uber H3](https://h3geo.org) | Apache 2.0 | `h3` Python package | everything |
 | Vegetation fuel maps | [LANDFIRE](https://landfire.gov) | public domain (US government) | free download | physics fire model only; out of the MVP |
 
+## Live mode: any US area (`backend/feeds.py`, `backend/area.py`, `backend/live.py`)
+
+Pulled on demand for the area a manager picks, and again whenever the data is 10 minutes old.
+Everything is free; two need a free key.
+
+| Data | Source | License / terms | How we get it | Used by |
+|---|---|---|---|---|
+| Wildfires reported now (name, point of origin, discovery time, size, containment) | [NIFC WFIGS Incident Locations, Current](https://data-nifc.opendata.arcgis.com/datasets/nifc::wfigs-incident-locations-current) (fed by IRWIN) | public (US government) | ArcGIS query | the fire list; a new fire's first report (for 2 h) |
+| Satellite fire detections, near real time (VIIRS on S-NPP, NOAA-20, NOAA-21; GOES) | [NASA FIRMS area API](https://firms.modaps.eosdis.nasa.gov/api/area/) | NASA open data, cite FIRMS | `FIRMS_MAP_KEY` (free) | nowcast |
+| Wind forecast (10 m wind and gusts, hourly) and the area's time zone | [National Weather Service API](https://www.weather.gov/documentation/services-web-api) (`/points`, then the forecast grid; issued at its update time) | public (US government) | JSON, no key | nowcast |
+| Wind backup, if the NWS doesn't answer (NOAA HRRR) | [Open-Meteo](https://open-meteo.com) (`models=gfs_hrrr`, run times from its HRRR metadata) | free, attribution (CC BY 4.0) | JSON API, no key | nowcast |
+| Evacuation orders and warnings | [FEMA IPAWS public alert feed](https://www.fema.gov/emergency-managers/practitioners/integrated-public-alert-warning-system/public/public-feed) (CAP) | public (US government) | XML feed, no key | who is warned; the banner |
+| Fire weather (Red Flag Warnings) | [National Weather Service API](https://www.weather.gov/documentation/services-web-api) | public (US government) | JSON, no key | the banner (context, not an order) |
+| Where people live | [U.S. Census Bureau TIGERweb, Census 2020 blocks](https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/tigerWMS_Census2020/MapServer/10) (population per block) | public domain (US government) | ArcGIS query, no key | placing estimated residents |
+| Age, disability, no-car households per tract | [U.S. Census Bureau ACS 2019-2023 5-year, Data API](https://www.census.gov/data/developers/data-sets/acs-5year.html) | public domain; see attribution below | `CENSUS_API_KEY` (free) | estimated residents (same rule as Altadena, `backend/census.py`) |
+| Nursing homes, with average residents per day | [CMS Nursing Home Provider Information](https://data.cms.gov/provider-data/dataset/4pq5-n9py) | public (US government) | Provider Data API, no key | care-home residents |
+| Shelters open now | [FEMA National Shelter System, open shelters](https://gis.fema.gov/arcgis/rest/services/NSS/OpenShelters/MapServer/0) | public (US government) | ArcGIS query, no key | drop-off points |
+| Example shelter when none is open (a public high school) | [NCES Public School Locations 2022-23](https://nces.ed.gov/programs/edge/Geographic/SchoolLocations) | public (US government) | ArcGIS query, no key | an EXAMPLE drop-off, labeled |
+
+Estimated, labeled on screen: people at home (Census counts, never real people), the example
+fleet, the example shelter, straight-line road times.
+
 ## Background we cite (not loaded)
 
 | Fact | Source |
@@ -56,6 +78,9 @@ When an owner finds a source, it's added here and the status changes to `SOURCED
 - Wind: NOAA High-Resolution Rapid Refresh (HRRR).
 - Damage data: CAL FIRE Damage Inspection (DINS). Facility data: California Community Care Licensing.
 - This product uses the Census Bureau Data API but is not endorsed or certified by the Census Bureau.
+- Live mode: wildfire incidents from NIFC; wind forecasts and alerts from the National Weather
+  Service; alerts from FEMA IPAWS; backup weather data by Open-Meteo.com (CC BY 4.0); nursing homes from CMS; shelters from FEMA; schools
+  from NCES.
 
 ## Not a source
 
