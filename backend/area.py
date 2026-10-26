@@ -471,26 +471,45 @@ def setup(lat: float, lon: float, name: str, radius_km: float = RADIUS_KM,
     folder = AREA_ROOT / slug(name)
     folder.mkdir(parents=True, exist_ok=True)
     box = box_around(lat, lon, radius_km)
-    notes = ["Road travel times are a straight-line estimate (no road network set up).",
-             "Care homes: Medicare-certified nursing homes only (CMS); a county adds every "
-             "licensed care home."]
+    notes = ["Road travel times are a straight-line estimate (no road network set up)."]
 
-    blocks = census_blocks(box, get)
+    def optional(fn, default, what: str):
+        """A national list that doesn't answer leaves its part out, and the area says so;
+        the rest of the area is still set up."""
+        try:
+            return fn()
+        except (OSError, ValueError, KeyError) as e:
+            notes.append(f"{what}: NOT included this time ({e}). Set the area up again "
+                         "later to add them.")
+            return default
+
+    blocks = census_blocks(box, get)  # without people there is nothing to plan: required
     states = {STATE_POSTAL[b.geoid[:2]] for b in blocks if b.geoid[:2] in STATE_POSTAL}
-    homes = nursing_homes(box, states, get) if states else []
-    people = facility_residents(homes)
+    homes = optional(lambda: nursing_homes(box, states, get) if states else [], None,
+                     "Care homes (Medicare's nursing-home list didn't answer)")
+    if homes is not None:
+        notes.append("Care homes: Medicare-certified nursing homes only (CMS); a county adds "
+                     "every licensed care home.")
+    people = facility_residents(homes or [])
     census_key = os.environ.get("CENSUS_API_KEY")
     if census_key and blocks:
-        acs = acs_by_tract({b.geoid[:11] for b in blocks}, census_key, get)
-        people += estimated_residents(blocks, acs, random.Random(SEED))
-        notes.append("People at home: estimated from Census ACS tract counts, placed at "
-                     "Census 2020 blocks by population; real addresses are never used.")
+        acs = optional(lambda: acs_by_tract({b.geoid[:11] for b in blocks}, census_key, get),
+                       None, "People at home (the Census ACS API didn't answer)")
+        if acs is not None:
+            people += estimated_residents(blocks, acs, random.Random(SEED))
+            notes.append("People at home: estimated from Census ACS tract counts, placed at "
+                         "Census 2020 blocks by population; real addresses are never used.")
+    elif not census_key:
+        notes.append("People at home: NOT included (no CENSUS_API_KEY on this server); care "
+                     "homes only.")
     else:
-        notes.append("People at home: NOT included; care homes only.")
+        notes.append("People at home: none (no Census 2020 block here has residents).")
 
-    shelters = open_shelters(lat, lon, get)
+    shelters = optional(lambda: open_shelters(lat, lon, get), [],
+                        "FEMA open shelters (FEMA's list didn't answer)")
     if not shelters:
-        example = example_shelter(lat, lon, radius_km, get)
+        example = optional(lambda: example_shelter(lat, lon, radius_km, get), None,
+                           "Example shelter (the NCES school list didn't answer)")
         shelters = [example] if example else []
         notes.append("No FEMA shelter is open nearby: the shelter is an EXAMPLE, labeled."
                      if example else
@@ -510,7 +529,7 @@ def setup(lat: float, lon: float, name: str, radius_km: float = RADIUS_KM,
         "study_area": {"source": f"{radius_km:g} km around ({lat:.4f}, {lon:.4f})"},
     }
     (folder / "meta.json").write_text(json.dumps(meta, indent=2) + "\n")
-    write_jsonl(folder / "facilities.jsonl", [f for f, _ in homes])
+    write_jsonl(folder / "facilities.jsonl", [f for f, _ in homes or []])
     write_jsonl(folder / "residents.jsonl", people)
     write_jsonl(folder / "shelters.jsonl", shelters)
     write_jsonl(folder / "vehicles.jsonl", vehicles)

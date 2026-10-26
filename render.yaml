@@ -36,7 +36,7 @@ services:
       - key: CENSUS_API_KEY
         sync: false
     # Areas are set up on demand into data/live/ on the service's own disk. A free service's
-    # disk is wiped on every deploy or restart: the picker sets an area up again in 15-60 s.
+    # disk is wiped on every deploy or restart: the picker sets an area up again in about 10-20 s.
 
   - type: web
     name: outrun-dashboard

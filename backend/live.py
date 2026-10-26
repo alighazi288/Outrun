@@ -4,7 +4,7 @@
 
     GET  /fires                  real US wildfires: new in the last few days or not contained
     GET  /areas                  the areas set up so far
-    POST /areas                  set one up (a fire from /fires, or any point): ~15-60 s
+    POST /areas                  set one up (a fire from /fires, or any point): ~10-20 s
     /areas/<name>/...            that area's own Outrun API: the same endpoints the dashboard,
                                  the manager and the agents use for the Eaton replay
                                  (/state, /plan, /decisions, /reports, /ws ...), plus /drill
@@ -104,7 +104,7 @@ def create_live_app(root: Path = area.AREA_ROOT,
     def list_areas() -> list[AreaOut]:
         return [describe(n) for n in sorted(areas)]
 
-    @app.post("/areas", status_code=201, summary="Set up an area (about 15-60 seconds)")
+    @app.post("/areas", status_code=201, summary="Set up an area (usually 10-20 seconds)")
     async def add_area(req: AreaIn) -> AreaOut:
         fire = None
         if req.fire_id:

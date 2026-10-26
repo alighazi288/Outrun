@@ -2,7 +2,7 @@
  * LivePicker: choose what live mode watches.
  *   - areas already set up on the live server (open one)
  *   - real US wildfires, newest first, from the national incident system: set one up
- *     (the server builds the area from national data in about 15-60 seconds)
+ *     (the server builds the area from national data, usually in under 20 seconds)
  *   - any place, by coordinates
  */
 
@@ -36,6 +36,15 @@ export default function LivePicker({ onOpen }: { onOpen: (area: string) => void 
   const [place, setPlace] = useState({ name: "", lat: "", lon: "" });
 
   const [waking, setWaking] = useState(false);
+  const [seconds, setSeconds] = useState(0);
+
+  // While an area is being set up, count the seconds so the wait is never a mystery.
+  useEffect(() => {
+    if (busy === null) return;
+    setSeconds(0);
+    const timer = setInterval(() => setSeconds((n) => n + 1), 1000);
+    return () => clearInterval(timer);
+  }, [busy]);
 
   useEffect(() => {
     const json = async <T,>(path: string): Promise<T> => {
@@ -98,7 +107,12 @@ export default function LivePicker({ onOpen }: { onOpen: (area: string) => void 
           </p>
         )}
         {error && <p className={styles.error}>{error}</p>}
-        {busy && <p className={styles.busy}>Setting up {busy}… usually 15-60 seconds.</p>}
+        {busy && (
+          <p className={styles.busy}>
+            Setting up {busy}: people, care homes, shelters, satellites, wind and alerts…{" "}
+            {seconds} s{seconds >= 20 && " (a national data service is slow today; still going)"}
+          </p>
+        )}
 
         {areas && areas.length > 0 && (
           <section>

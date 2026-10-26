@@ -138,6 +138,51 @@ def test_setting_up_without_any_wind_is_an_error_not_a_still_day(tmp_path, monke
         area.refresh_fire(tmp_path, datetime(2026, 10, 14, 20, 30, tzinfo=UTC), get=_busy)
 
 
+def test_an_area_is_still_set_up_when_the_care_home_list_does_not_answer(tmp_path,
+                                                                           monkeypatch):
+    monkeypatch.delenv("FIRMS_MAP_KEY", raising=False)
+    monkeypatch.delenv("CENSUS_API_KEY", raising=False)
+    monkeypatch.setattr(area, "AREA_ROOT", tmp_path)
+    school = {"features": [{"attributes": {"NCESSCH": "3", "NAME": "La Canada High",
+                                           "CITY": "La Canada", "LAT": 34.30, "LON": -118.13}}]}
+    grid = {"properties": {"updateTime": "2026-10-14T19:45:00+00:00",
+                           "windSpeed": {"values": [{"validTime": "2026-10-14T20:00:00+00:00/PT2H",
+                                                     "value": 36.0}]},
+                           "windDirection": {"values": [{"validTime":
+                                                         "2026-10-14T20:00:00+00:00/PT2H",
+                                                         "value": 45}]}}}
+
+    def get(url):
+        if url.startswith(area.BLOCKS):
+            return _blocks_page([{"GEOID": "060374602002004", "POP100": 185,
+                                  "INTPTLAT": "+34.2002830", "INTPTLON": "-118.1401793"}])
+        if url.startswith(area.CMS_NURSING_HOMES):
+            raise TimeoutError("The read operation timed out")
+        if url.startswith(area.FEMA_OPEN_SHELTERS):
+            return json.dumps({"features": []})
+        if url.startswith(area.NCES_SCHOOLS):
+            return json.dumps(school)
+        if "/points/" in url:
+            return json.dumps({"properties": {"forecastGridData": "https://api.weather.gov/g",
+                                              "timeZone": "America/Los_Angeles"}})
+        if url == "https://api.weather.gov/g":
+            return json.dumps(grid)
+        if "alerts/active" in url:
+            return json.dumps({"features": []})
+        if "IPAWS" in url:
+            return "<alerts/>"
+        raise AssertionError(f"unexpected request {url}")
+
+    folder = area.setup(34.19, -118.13, "Test Town", now=datetime(2026, 10, 14, 20, 30,
+                                                                    tzinfo=UTC), get=get)
+    meta = json.loads((folder / "meta.json").read_text())
+    assert any(n.startswith("Care homes (Medicare's nursing-home list didn't answer): NOT "
+                            "included") for n in meta["approximations"])
+    assert not any(n.startswith("Care homes: Medicare") for n in meta["approximations"])
+    assert (folder / "facilities.jsonl").read_text() == ""
+    assert (folder / "vehicles.jsonl").read_text().count("\n") == 19, "still routes people"
+
+
 def test_the_example_fleet_is_the_baseline_at_the_shelter():
     shelter = area.Shelter(id="s", name="S", lat=34.0, lon=-118.0)
     fleet = area.example_fleet(shelter)

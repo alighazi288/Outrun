@@ -59,9 +59,12 @@ CAP = "{urn:oasis:names:tc:emergency:cap:1.2}"
 FIRE_WEATHER = {"Red Flag Warning", "Fire Weather Watch", "Fire Warning", "Extreme Fire Danger"}
 
 
+TIMEOUT_S = 20  # every source answers in a few seconds; one that hangs is treated as down
+
+
 def http_get(url: str) -> str:
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(request, timeout=60) as response:
+    with urllib.request.urlopen(request, timeout=TIMEOUT_S) as response:
         return response.read().decode("utf-8")
 
 
