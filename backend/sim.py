@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable
 from datetime import datetime
 
@@ -29,13 +30,18 @@ class Simulation:
         """decisions: where the manager's decisions come from. None = plans auto-approve."""
         self.store = store
         self.replay = Replay(store, planner=planner, travel=travel, decisions=decisions)
+        # The API works out steps on worker threads: one at a time, so two requests never
+        # build the same replay at once.
+        self.lock = threading.RLock()
 
     def invalidate(self) -> None:
         """Call after the data changes (e.g. a new help request or fire report)."""
-        self.replay.invalidate()
+        with self.lock:
+            self.replay.invalidate()
 
     def step(self, t: datetime) -> Frame:
-        return self.replay.frame_at(t)
+        with self.lock:
+            return self.replay.frame_at(t)
 
     def world_state(self, t: datetime, decisions: list[Decision] | None = None) -> WorldState:
         return world_state(self.step(t), t, self.store.name, decisions or [])

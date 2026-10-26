@@ -7,6 +7,7 @@
  * forecast, "Back to now" returns to the real time.
  */
 
+import { useState } from "react";
 import { useWorld } from "@/context/WorldContext";
 import styles from "./Timeline.module.css";
 
@@ -14,6 +15,22 @@ export default function Timeline() {
   const { source, manifest, route } = useWorld();
   const isReplay = source.mode === "replay";
   const isLiveArea = route.mode === "live";
+  // One request at a time: late in the night a step takes the free server several seconds,
+  // and clicks made meanwhile would queue up behind it.
+  const [busy, setBusy] = useState<string | null>(null);
+  const [failed, setFailed] = useState<string | null>(null);
+  const run = async (doing: string, action: () => Promise<void> | void) => {
+    if (busy) return;
+    setBusy(doing);
+    setFailed(null);
+    try {
+      await action();
+    } catch (e) {
+      setFailed(`Couldn't do that: ${(e as Error).message}. Try again.`);
+    } finally {
+      setBusy(null);
+    }
+  };
 
   return (
     <div className={styles.bar}>
@@ -66,15 +83,24 @@ export default function Timeline() {
         </div>
       ) : (
         <div className={styles.liveControls}>
-          <button className={styles.btn} onClick={() => void source.step(1)}>
+          <button
+            className={styles.btn}
+            disabled={busy !== null}
+            onClick={() => void run("Working out the next 10 minutes…", () => source.step(1))}
+          >
             {isLiveArea ? "Look ahead 10 min" : "Next 10 min"}
           </button>
           <button
             className={`${styles.btn} ${styles.btnSecondary}`}
-            onClick={() => void source.reset()}
+            disabled={busy !== null}
+            onClick={() =>
+              void run(isLiveArea ? "Back to now…" : "Rewinding to 6:00 PM…", () => source.reset())
+            }
           >
             {isLiveArea ? "Back to now" : "Reset"}
           </button>
+          {busy && <span className={styles.busy}>{busy}</span>}
+          {failed && <span className={styles.failed}>{failed}</span>}
         </div>
       )}
     </div>

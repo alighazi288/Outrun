@@ -205,11 +205,16 @@ class _Planner:
             _VehicleState(v, (v.lat, v.lon), clock=v.available_in_min) for v in self.vehicles
         ]
         chosen: dict[str, tuple[str, _Option]] = {}
+        # A vehicle that can do nothing stays as it is, and the pending list only shrinks, so
+        # it can never do anything again: stop asking (same plan, far fewer checks).
+        stuck: set[str] = set()
 
         progressed = True
         while pending and progressed:
             progressed = False
             for vs in sorted(states, key=lambda s: s.clock):
+                if vs.vehicle.id in stuck:
+                    continue
                 options = [
                     o for rid in pending
                     if (o := self.option(vs.pos, vs.clock, vs.fits(self.res[rid]), rid))
@@ -223,6 +228,8 @@ class _Planner:
                 elif vs.onboard and self.shelters:
                     self.drop_off(vs)
                     progressed = True
+                else:
+                    stuck.add(vs.vehicle.id)
         return self._finish(pending, states, chosen, t, strategy)
 
     def run_dispatcher(self, t: datetime) -> Plan:

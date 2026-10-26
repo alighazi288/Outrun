@@ -110,9 +110,9 @@ export interface DataSource {
   setStepIndex(index: number): void;
   setPlaying(playing: boolean): void;
   /** Advance by n steps (replay) or POST /clock/step?n=n (live) */
-  step(n?: number): void;
+  step(n?: number): Promise<void> | void;
   /** Reset to step 0 (replay) or POST /clock/reset (live) */
-  reset(): void;
+  reset(): Promise<void> | void;
   /** Initialise the source (fetch manifest / connect WS) */
   init(): Promise<void>;
   /** Stop timers and sockets (the screen switched to another source). */

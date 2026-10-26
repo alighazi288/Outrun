@@ -226,7 +226,13 @@ def create_app(store: DataStore | None = None, log_path: Path | None = None,
         return sim.world_state(t, log.decisions_at(t))
 
     async def broadcast() -> None:
-        payload = state(clock.now).model_dump_json()
+        """Work out the step on a worker thread (late in the night one takes seconds on a
+        small server, and the API must keep answering, /health included), then push it."""
+        t = clock.now
+        if not sockets:
+            await asyncio.to_thread(sim.step, t)  # ready for the /state request that follows
+            return
+        payload = await asyncio.to_thread(lambda: state(t).model_dump_json())
         for ws in list(sockets):
             try:
                 await ws.send_text(payload)
@@ -438,11 +444,16 @@ def create_app(store: DataStore | None = None, log_path: Path | None = None,
     )
     async def record_decision(d: Decision) -> Decision:
         if approval == "manager":
-            problem = await asyncio.to_thread(sim.replay.check_decision, d)
+            def check():
+                with sim.lock:
+                    return sim.replay.check_decision(d)
+
+            problem = await asyncio.to_thread(check)
             if problem is not None:
                 raise HTTPException(*problem)
         log.record("decision", d)
-        sim.replay.invalidate_from(d.t)
+        with sim.lock:
+            sim.replay.invalidate_from(d.t)
         await broadcast()
         return d
 

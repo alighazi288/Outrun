@@ -27,7 +27,18 @@
 
 .liveControls {
   display: flex;
+  align-items: center;
   gap: 8px;
+}
+
+.busy {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.failed {
+  font-size: 12px;
+  color: var(--accent-fire);
 }
 
 .btn {
@@ -41,8 +52,13 @@
   flex-shrink: 0;
 }
 
-.btn:hover {
+.btn:hover:not(:disabled) {
   background: var(--surface-hover);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: wait;
 }
 
 .btnSecondary {
