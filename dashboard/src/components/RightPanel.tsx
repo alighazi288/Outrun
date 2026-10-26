@@ -17,6 +17,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useWorld } from "@/context/WorldContext";
 import { formatClock } from "@/time";
+import { personLabel, vehicleLabel } from "@/labels";
 import type { components } from "@/api-types";
 import styles from "./RightPanel.module.css";
 
@@ -27,6 +28,12 @@ type Facility = components["schemas"]["Facility"];
 type PlanChange = components["schemas"]["PlanChange"];
 
 // ─── Status pill ─────────────────────────────────────────────────────────────
+
+const DECISION_TEXT: Record<string, string> = {
+  approve: "✓ You approved",
+  modify: "✎ You changed and approved",
+  reject: "✕ You rejected",
+};
 
 const STATUS_LABELS: Record<string, string> = {
   auto: "Auto",
@@ -66,6 +73,7 @@ function EscalationsSection({
   facilities,
   pickedUp,
   onFlyTo,
+  labelFor,
 }: {
   unreachable: string[];
   escalatedFireCommand: string[];
@@ -75,6 +83,7 @@ function EscalationsSection({
   facilities: Map<string, Facility>;
   pickedUp: Set<string>;
   onFlyTo: (lon: number, lat: number) => void;
+  labelFor: (id: string) => string;
 }) {
   // Split escalated_fire_command into "Too late" vs "Only reachable through danger"
   const tooLate: string[] = [];
@@ -152,6 +161,7 @@ function EscalationsSection({
           facilities={facilities}
           pickedUp={pickedUp}
           onFlyTo={onFlyTo}
+          labelFor={labelFor}
         />
       ))}
     </section>
@@ -164,12 +174,14 @@ function EscalGroup({
   facilities,
   pickedUp,
   onFlyTo,
+  labelFor,
 }: {
   group: EscalGroup;
   residents: Map<string, Resident>;
   facilities: Map<string, Facility>;
   pickedUp: Set<string>;
   onFlyTo: (lon: number, lat: number) => void;
+  labelFor: (id: string) => string;
 }) {
   const [open, setOpen] = useState(false);
   const [showAll, setShowAll] = useState(false);
@@ -224,6 +236,7 @@ function EscalGroup({
             <EscalHomeItem
               key={item.id}
               id={item.id}
+              label={labelFor(item.id)}
               reason={item.reason}
               resident={residents.get(item.id) ?? null}
               pickedUp={pickedUp}
@@ -254,22 +267,20 @@ function EscalGroup({
 /** Describes a single resident at home */
 function EscalHomeItem({
   id,
+  label,
   reason,
   resident,
   pickedUp,
   onFlyTo,
 }: {
   id: string;
+  label: string;
   reason: string;
   resident: Resident | null;
   pickedUp: Set<string>;
   onFlyTo: (lon: number, lat: number) => void;
 }) {
   const isPickedUp = pickedUp.has(id);
-  // Build a human label from needs rather than showing the raw ID
-  const label = resident
-    ? (resident.needs || id)
-    : id;
 
   return (
     <div className={`${styles.escalItem} ${isPickedUp ? styles.pickedUp : ""}`}>
@@ -293,6 +304,7 @@ function EscalHomeItem({
 // ─── Routes section ───────────────────────────────────────────────────────────
 
 function RoutesSection({
+  labelFor,
   routes,
   label,
   reasons,
@@ -305,6 +317,7 @@ function RoutesSection({
   selectedId,
   onSelectId,
 }: {
+  labelFor: (id: string) => string;
   routes: Array<{ vehicle: string; stops: string[]; eta_min: number[] }>;
   label: string;
   reasons: Record<string, string>;
@@ -328,6 +341,7 @@ function RoutesSection({
       {routes.map((route) => (
         <RouteCard
           key={route.vehicle}
+          labelFor={labelFor}
           route={route}
           reasons={reasons}
           residents={residents}
@@ -345,6 +359,7 @@ function RoutesSection({
 }
 
 function RouteCard({
+  labelFor,
   route,
   reasons,
   residents,
@@ -356,6 +371,7 @@ function RouteCard({
   selectedId,
   onSelectId,
 }: {
+  labelFor: (id: string) => string;
   route: { vehicle: string; stops: string[]; eta_min: number[] };
   reasons: Record<string, string>;
   residents: Map<string, Resident>;
@@ -384,7 +400,7 @@ function RouteCard({
       onClick={() => onSelectId(isSelected ? null : route.vehicle)}
     >
       <div className={styles.routeHeader}>
-        <span>🚐 <strong>{route.vehicle}</strong></span>
+        <span>🚐 <strong>{vehicleLabel(route.vehicle)}</strong></span>
         {modifyMode && (
           <button
             className={styles.holdBtn}
@@ -405,9 +421,7 @@ function RouteCard({
         const reason = reasons[stopId];
         const label = shelter
           ? `🏠 ${shelter.name}`
-          : resident
-            ? `${resident.needs || stopId}`
-            : stopId;
+          : labelFor(stopId);
 
         // For "Move to": vehicles whose type is in resident.vehicle_types
         const compatibleVehicles = resident?.vehicle_types
@@ -417,7 +431,7 @@ function RouteCard({
           : [];
 
         return (
-          <div key={stopId} className={styles.stop}>
+          <div key={`${i}-${stopId}`} className={styles.stop}>
             <span className={styles.stopNum}>{i + 1}</span>
             <div className={styles.stopInfo}>
               <span className={styles.stopLabel}>{label}</span>
@@ -456,7 +470,7 @@ function RouteCard({
                       <option value="">Move to…</option>
                       {compatibleVehicles.map((v) => (
                         <option key={v.id} value={v.id}>
-                          {v.id}
+                          {vehicleLabel(v.id)}
                         </option>
                       ))}
                     </select>
@@ -524,6 +538,12 @@ export default function RightPanel({
     worldState.risks.map((r) => [r.resident_id, r])
   );
   const pickedUpSet = new Set(Object.keys(worldState.picked_up ?? {}));
+  const lastDecision = worldState.decisions?.[worldState.decisions.length - 1];
+  const labelFor = (id: string): string => {
+    const r = residentsMap.get(id);
+    if (!r) return id;
+    return personLabel(r, r.facility_id ? facilitiesMap.get(r.facility_id)?.name : undefined);
+  };
 
   // Routes to show: plan.routes while awaiting; schedule otherwise
   const routesToShow = isAwaiting ? plan.routes : (worldState.schedule ?? []);
@@ -534,7 +554,9 @@ export default function RightPanel({
     <aside ref={panelRef} className={styles.panel}>
       {/* 1. Plan header */}
       <div className={styles.planHeader}>
-        <span className={styles.planId}>{plan.plan_id}</span>
+        <span className={styles.planId} title={plan.plan_id}>
+          Plan for {formatClock(plan.t)}
+        </span>
         <span
           className={`${styles.pill} ${STATUS_CLASS[worldState.plan_status] ?? styles.pillGrey}`}
         >
@@ -552,6 +574,7 @@ export default function RightPanel({
       {isLive && isAwaiting ? (
         <DecisionBoxWithModify
           planId={plan.plan_id}
+          labelFor={labelFor}
           apiUrl={apiUrl}
           worldStateT={worldState.t}
           modifyMode={modifyMode}
@@ -573,16 +596,26 @@ export default function RightPanel({
             }
           }}
         />
+      ) : !isLive ? (
+        <div className={styles.replayNote}>
+          Replay: plans are approved automatically.
+        </div>
       ) : (
-        !isLive && (
+        lastDecision && (
           <div className={styles.replayNote}>
-            Replay: plans are approved automatically.
+            {DECISION_TEXT[lastDecision.action]} the plan for {formatClock(lastDecision.t)}
+            {lastDecision.changes?.length
+              ? ` (${lastDecision.changes.length} change${lastDecision.changes.length > 1 ? "s" : ""})`
+              : ""}
+            {lastDecision.reason ? `: "${lastDecision.reason}"` : "."} The next plan comes with
+            the next 10 minutes.
           </div>
         )
       )}
 
       {/* 3. Routes */}
       <RoutesSection
+        labelFor={labelFor}
         routes={routesToShow}
         label={routesLabel}
         reasons={plan.reasons as Record<string, string>}
@@ -606,6 +639,7 @@ export default function RightPanel({
         facilities={facilitiesMap}
         pickedUp={pickedUpSet}
         onFlyTo={handleFlyTo}
+        labelFor={labelFor}
       />
     </aside>
   );
@@ -615,6 +649,7 @@ export default function RightPanel({
 
 function DecisionBoxWithModify({
   planId,
+  labelFor,
   apiUrl,
   worldStateT,
   modifyMode,
@@ -625,6 +660,7 @@ function DecisionBoxWithModify({
   onDecisionSent,
 }: {
   planId: string;
+  labelFor: (id: string) => string;
   apiUrl: string;
   worldStateT: string;
   modifyMode: boolean;
@@ -713,11 +749,11 @@ function DecisionBoxWithModify({
             <div key={i} className={styles.changeItem}>
               <span className={styles.changeDesc}>
                 {c.kind === "hold_vehicle"
-                  ? `Hold ${c.vehicle ?? ""}`
+                  ? `Hold ${vehicleLabel(c.vehicle ?? "")}`
                   : c.kind === "remove_stop"
-                    ? `Remove ${c.resident ?? ""}`
+                    ? `Remove ${labelFor(c.resident ?? "")}`
                     : c.kind === "reassign"
-                      ? `Move ${c.resident ?? ""} → ${c.vehicle ?? ""}`
+                      ? `Move ${labelFor(c.resident ?? "")} → ${vehicleLabel(c.vehicle ?? "")}`
                       : `${c.kind}`}
               </span>
               <button

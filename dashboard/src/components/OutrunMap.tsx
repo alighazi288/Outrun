@@ -25,6 +25,7 @@ import { buildVehiclesLayer } from "@/layers/vehicleLayer";
 import type { components } from "@/api-types";
 import { LiveSource } from "@/data/source";
 import { formatDateTime as formatTime } from "@/time";
+import { NEEDS_TEXT, SOURCE_TEXT, vehicleLabel } from "@/labels";
 import styles from "./OutrunMap.module.css";
 
 type Resident = components["schemas"]["Resident"];
@@ -208,7 +209,7 @@ export default function OutrunMap({
       }
       for (const route of [...worldState.plan.routes, ...(worldState.schedule ?? [])]) {
         for (const stop of route.stops) {
-          if (residentsMap.has(stop)) status.set(stop, `On the plan: ${route.vehicle}`);
+          if (residentsMap.has(stop)) status.set(stop, `On the plan: ${vehicleLabel(route.vehicle)}`);
         }
       }
       for (const [id, t] of Object.entries(worldState.picked_up ?? {})) {
@@ -374,22 +375,6 @@ function emptyTipContext(): TipContext {
   return { homes: new Map(), facilityNames: new Map(), status: new Map(), risks: new Map() };
 }
 
-const NEEDS_TEXT: Record<string, string> = {
-  wheelchair: "Wheelchair user",
-  oxygen: "On home oxygen",
-  bedbound: "Bedbound",
-  no_car: "No car",
-  none: "No special needs",
-};
-
-const SOURCE_TEXT: Record<string, string> = {
-  estimated: "Estimated from Census counts (not a real person)",
-  registry: "On the pre-fire list (estimated from Census counts)",
-  call: "Called for help (a simulated call; estimated from Census counts)",
-  request: "Help request",
-  facility: "Care-home resident",
-};
-
 function pct(p: number): string {
   return `${Math.round(p * 100)}%`;
 }
@@ -398,7 +383,7 @@ function residentText(obj: Record<string, unknown>, ctx: TipContext): string {
   const id = String(obj.id);
   const people = Number(obj.people ?? 1);
   const lines = [
-    `${NEEDS_TEXT[String(obj.needs)] ?? String(obj.needs)}${people > 1 ? ` (${people} people)` : ""}`,
+    `${NEEDS_TEXT[String(obj.needs)] ?? "Person"}${people > 1 ? ` (${people} people)` : ""}`,
   ];
   const home = obj.facility_id ? ctx.facilityNames.get(String(obj.facility_id)) : undefined;
   lines.push(home ? `Lives at ${home}` : SOURCE_TEXT[String(obj.source)] ?? String(obj.source));
@@ -443,8 +428,7 @@ function getTooltipText(obj: Record<string, unknown>, ctx: TipContext): string |
   }
   // Vehicle
   if ("seats" in obj && "type" in obj) {
-    const kind = String(obj.type).replace("_", " ");
-    return `${String(obj.id)} · ${kind}\n${String(obj.seats)} seats, ${String(obj.wheelchair_spaces ?? 0)} wheelchair spaces · ${String(obj.status ?? "")}`;
+    return `${vehicleLabel(String(obj.id))}\n${String(obj.seats)} seats, ${String(obj.wheelchair_spaces ?? 0)} wheelchair spaces · ${String(obj.status ?? "")}`;
   }
   // Fire outlook hexagon
   if ("p_3h" in obj && "h3" in obj && !("resident_id" in obj)) {
