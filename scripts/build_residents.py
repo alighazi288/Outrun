@@ -221,7 +221,9 @@ def estimated_residents(acs: dict, inside: dict[str, list[tuple[float, float]]],
     return [r.model_copy(update={"id": f"est_{i:05d}"}) for i, r in enumerate(out, 1)]
 
 
-def build() -> list[Resident]:
+def inputs() -> tuple[list[Facility], dict, dict[str, list[tuple[float, float]]], dict[str, int]]:
+    """What the residents are drawn from: care homes, ACS counts, the homes inside the study
+    area per tract, and each tract's total homes (downloaded once into data/raw)."""
     folder = DATASETS["eaton"]
     meta = json.loads((folder / "meta.json").read_text())
     cells = set(grid_cells(meta["bbox"]))
@@ -232,9 +234,15 @@ def build() -> list[Resident]:
         if box["south"] <= lat <= box["north"] and box["west"] <= lon <= box["east"]]
     inside = homes_by_tract(tracts, homes, cells)
     facilities = read_jsonl(folder / "facilities.jsonl", Facility)
-    rng = random.Random(SEED)
-    return (facility_residents(facilities) + estimated_residents(
-        download_acs(set(inside)), inside, download_tract_home_counts(tracts), rng))
+    return facilities, download_acs(set(inside)), inside, download_tract_home_counts(tracts)
+
+
+def build(seed: int = SEED, drawn_from=None) -> list[Resident]:
+    """residents.jsonl is seed SEED; the evaluation draws other populations with other seeds
+    (evaluation/sweep.py). Only the estimated residents change: care homes are filled by rule."""
+    facilities, acs, inside, total_homes = drawn_from or inputs()
+    return (facility_residents(facilities)
+            + estimated_residents(acs, inside, total_homes, random.Random(seed)))
 
 
 def main() -> None:

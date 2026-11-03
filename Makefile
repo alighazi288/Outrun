@@ -4,7 +4,7 @@
 -include .env
 export
 
-.PHONY: help install test lint fix check api live export replay-bundle view live-pull live-fires live-area eval forecast-check arrival-window check-data fixtures openapi fire-reports evac-orders roads dins clean
+.PHONY: help install test lint fix check api live export replay-bundle view live-pull live-fires live-area eval sweep report forecast-check arrival-window check-data fixtures openapi fire-reports evac-orders roads dins clean
 
 help:  ## List commands
 	@grep -hE '^[a-z]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-9s %s\n", $$1, $$2}'
@@ -49,8 +49,14 @@ live-fires:  ## US wildfires still burning right now (NIFC)
 live-area:  ## Set up any US area from national data: make live-area LAT=39.76 LON=-121.62 NAME=paradise
 	uv run python -m backend.area --lat $(LAT) --lon $(LON) --name $(NAME)
 
-eval:  ## Score the planners vs waiting for orders and a perfect forecast (SEEDS=5; no sweep yet)
+eval:  ## Quick check: the planners vs waiting for orders and a perfect forecast (SEEDS=5)
 	uv run python -m evaluation.standin --seeds $(or $(SEEDS),5)
+
+sweep:  ## The full evaluation on Eaton, resumable (PART=1/3 to split laptops; WORKERS=5)
+	OUTRUN_DATASET=eaton uv run python -m evaluation.sweep --part $(or $(PART),1/1) $(if $(WORKERS),--workers $(WORKERS))
+
+report:  ## Tables from the full evaluation -> evaluation/results/REPORT.md
+	uv run python -m evaluation.report
 
 forecast-check:  ## Score the fire forecast (DATASET=palisades to choose settings; eaton once)
 	OUTRUN_DATASET=$(or $(DATASET),palisades) uv run python -m evaluation.forecast_check

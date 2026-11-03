@@ -93,7 +93,10 @@ class DataStore:
     `residents` is who the planner can know about, with `known_at` set by backend/knowledge.py.
     """
 
-    def __init__(self, folder: Path, knowledge: KnowledgeParams | None = None, seed: int = 0):
+    def __init__(self, folder: Path, knowledge: KnowledgeParams | None = None, seed: int = 0,
+                 population: list[Resident] | None = None):
+        """population: everyone who may need help, instead of residents.jsonl (the evaluation
+        draws 30 synthetic populations; evaluation/sweep.py)."""
         if not (folder / "meta.json").exists():
             raise FileNotFoundError(
                 f"No dataset at {folder}. Run `uv run python scripts/make_fake_data.py` for "
@@ -106,7 +109,8 @@ class DataStore:
         # While the real dataset is being built (data/BUILD.md), missing files are filled in:
         self.fake_inputs: list[str] = []  # people/fleet files borrowed from the fake set
         self.missing_inputs: list[str] = []  # fire files not built yet, left empty
-        self.population = read_jsonl(self._path("residents.jsonl"), Resident)
+        self.population = (population if population is not None
+                           else read_jsonl(self._path("residents.jsonl"), Resident))
         self.vehicles = read_jsonl(self._path("vehicles.jsonl"), Vehicle)
         self.shelters = read_jsonl(self._path("shelters.jsonl"), Shelter)
         self.detections = read_jsonl(self._path("detections.jsonl"), FireDetection, optional=True)
