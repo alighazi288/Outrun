@@ -148,6 +148,8 @@ def runs(populations: int = POPULATIONS) -> list[Run]:
     add("bad_night", "bad night", BAD_NIGHT)
     add("extras", "baseline", BASELINE, mode="wait for orders")
     add("extras", "baseline", BASELINE, planners=("closest first",))
+    # Roughly how it works today: wait for the orders, then the nearest call first.
+    add("extras", "baseline", BASELINE, planners=("closest first",), mode="wait for orders")
     add("extras", "baseline", BASELINE, planners=("ours",), mode="true fire path")
     add("p5", "percentile=5", Settings(percentile=5))
     add("equal_weights", "equal weights", Settings(equal_weights=True))

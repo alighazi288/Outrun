@@ -99,7 +99,8 @@ def report(rows: list[dict]) -> str:
     w("| Planner | Mode | Picked up in time | Fire reached (people) |\n| --- | --- | --- | --- |")
     for (group, planner, mode) in [
         ("sweep", "ours", "our forecast"), ("sweep", "dispatcher rule", "our forecast"),
-        ("extras", "closest first", "our forecast"), ("extras", "ours", "wait for orders"),
+        ("extras", "closest first", "our forecast"), ("extras", "closest first", "wait for orders"),
+        ("extras", "ours", "wait for orders"),
         ("extras", "dispatcher rule", "wait for orders"), ("extras", "ours", "true fire path"),
     ]:
         reached = res.metric(group, "baseline", planner, "reached", mode)
@@ -112,10 +113,12 @@ def report(rows: list[dict]) -> str:
     ours_f, rule_f = (*base, "ours", "our forecast"), (*base, "dispatcher rule", "our forecast")
     ours_w = ("extras", "baseline", "ours", "wait for orders")
     rule_w = ("extras", "baseline", "dispatcher rule", "wait for orders")
+    today = ("extras", "baseline", "closest first", "wait for orders")
     for text, a, b in [
         ("Ours vs the dispatcher rule (both with our forecast)", ours_f, rule_f),
         ("Our forecast vs waiting for the real orders (ours)", ours_f, ours_w),
         ("Our forecast vs waiting for the real orders (the rule)", rule_f, rule_w),
+        ("Outrun vs roughly today (closest first, after the real orders)", ours_f, today),
     ]:
         w(f"| {text} | {diff(res.paired(a, b))} |")
 

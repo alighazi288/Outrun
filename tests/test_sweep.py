@@ -26,7 +26,7 @@ def test_every_run_is_planned_once_and_paired():
     # A tested value equal to the baseline is the baseline run, not a second copy of it.
     labels = {r.label for r in plan if r.group == "sweep"}
     assert "safety_margin_min=30" not in labels and "safety_margin_min=15" in labels
-    assert len(sweep.runs()) == 2280
+    assert len(sweep.runs()) == 2310
 
 
 def test_the_fleet_curve_keeps_the_mix_and_the_depot():
