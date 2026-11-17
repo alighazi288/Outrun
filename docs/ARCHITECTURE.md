@@ -19,12 +19,12 @@ These names are the contract for the cards. The files are not in the repo yet: `
    - The nowcast is an uncertain signal. Deadlines use its pessimistic side.
    - The optimizer obeys the driver-safety rule.
    - Every assumed number lives in `backend/assumptions.py` with its source or "placeholder" and the range we test.
-3. **Agents.** Two watsonx Orchestrate agents (ADK YAML in git, IBM Granite). They never emit numbers.
+3. **Agents.** Two watsonx Orchestrate agents (ADK YAML in git, on Orchestrate's `groq/openai/gpt-oss-120b`; IBM Granite 4 failed tool calling in the `react_core` style, see `agents/README.md`). They never emit numbers.
    - **Intake** turns help requests and fire reports into records.
    - **Dispatch** explains the plan and waits for approval.
-   - A third agent is a supervisor only if Orchestrate needs one to route between Intake and Dispatch. The Granite model name is confirmed when the instance is registered.
+   - A third agent is a supervisor only if Orchestrate needs one to route between Intake and Dispatch.
    - Alert text is a fixed English/Spanish template with blanks filled from engine output.
-4. **Dashboard.** React, MapLibre, deck.gl, OpenFreeMap. Shows map (fire outlook, fire reports, detections, care facilities, residents, routes), timeline, approval panel, embedded chat, and the triage weights. Receives live state over WebSocket. The judged demo plays precomputed files.
+4. **Dashboard.** React, MapLibre, deck.gl, OpenFreeMap. Shows map (fire outlook, fire reports, detections, care facilities, residents, routes), timeline and approval panel; the agents run in Orchestrate's chat. Receives live state over WebSocket. The judged demo plays precomputed files.
 5. **Evaluation.** Same information limits for every strategy. Sweeps one lever at a time, plus two combined scenarios and the fleet-size curve. Reports ranges.
 
 ## Folder structure

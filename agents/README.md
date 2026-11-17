@@ -68,8 +68,10 @@ Check a file offline before importing (uses the ADK's own validator):
 The IBM login from `env activate` lasts about an hour; run it again when a command says the token
 expired.
 
-## How the agents are tested
+## How to check the agents
 
 - No AI runs inside the evaluation runs.
-- **Intake** is tested by comparing its output on the real published fire-report text against hand-checked records, field by field.
-- **Dispatch** is tested by an automatic check that every number in its explanations appears in the tool outputs.
+- These checks are done by hand in Orchestrate's chat. They aren't automated in this repo.
+- **Intake:** give it the real published fire-report text and compare its records with
+  hand-checked ones, field by field.
+- **Dispatch:** check that every number in its explanation appears in the tool outputs.
